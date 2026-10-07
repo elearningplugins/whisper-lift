@@ -1,0 +1,23 @@
+#!/bin/sh
+# Runs the Swift package tests under Xcode's thread, address and undefined-behavior sanitizers; swift test cannot load sanitizer runtimes into its signed helper, so this uses xcodebuild.
+set -eu
+cd "$(dirname "$0")/../ios/GarageTiles/GarageTilesKit"
+derived="${SANITIZE_DERIVED_DATA:-$(mktemp -d)}"
+export TEST_RUNNER_TSAN_OPTIONS="halt_on_error=1"
+export TEST_RUNNER_ASAN_OPTIONS="halt_on_error=1:detect_leaks=0"
+export TEST_RUNNER_UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1"
+for sanitizer in Thread Address UndefinedBehavior; do
+    echo "Sanitizer: $sanitizer"
+    log="$(mktemp)"
+    status=0
+    xcodebuild test -scheme GarageTilesKit-Package -destination "platform=macOS" -derivedDataPath "$derived/$sanitizer" \
+        "-enable${sanitizer}Sanitizer" YES >"$log" 2>&1 || status=$?
+    if [ "$status" -ne 0 ] || grep -qE "WARNING: ThreadSanitizer|ERROR: AddressSanitizer|SUMMARY: UndefinedBehaviorSanitizer|: runtime error:" "$log"; then
+        grep -E "WARNING: ThreadSanitizer|ERROR: AddressSanitizer|runtime error:|SUMMARY:|error:|TEST FAILED" "$log" | head -20
+        echo "Sanitizer $sanitizer failed (exit $status); full log: $log"
+        exit 1
+    fi
+    grep -E "Test run with|TEST SUCCEEDED" "$log"
+    rm -f "$log"
+done
+echo "All sanitizers clean"

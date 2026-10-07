@@ -1,0 +1,5 @@
+#!/bin/sh
+# Runs the Phase 0 automated tests; needs only the Swift toolchain, not Xcode or a device.
+set -eu
+cd "$(dirname "$0")/.."
+swift test --package-path ios/GarageTiles/GarageTilesKit -Xswiftc -warnings-as-errors

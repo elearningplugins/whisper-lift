@@ -1,0 +1,60 @@
+#!/bin/sh
+# Builds the app for a generic iPhone without signing, then runs the UI tests in an iOS Simulator; needs Xcode 26 and XcodeGen, as on the GitHub runner.
+set -eu
+scripts="$(cd "$(dirname "$0")" && pwd)"
+cd "$scripts/../ios/GarageTiles"
+# Validated before the recursive delete, so a mistaken CI_OUTPUT_DIR such as / or the repository can never be removed.
+out="$("$scripts/ci-output-dir" "${CI_OUTPUT_DIR:-$PWD/build/ci}")"
+rm -rf "$out"
+mkdir -p "$out"
+xcodebuild -version
+xcodegen generate
+
+echo "Building for a generic iOS device without signing"
+xcodebuild build -project GarageTiles.xcodeproj -scheme GarageTiles -configuration Debug \
+    -destination 'generic/platform=iOS' -derivedDataPath "$out/DerivedData-device" \
+    CODE_SIGNING_ALLOWED=NO SWIFT_TREAT_WARNINGS_AS_ERRORS=YES | tee "$out/build-device.log" | grep -E '(error|warning):|BUILD (SUCCEEDED|FAILED)' || true
+grep -q 'BUILD SUCCEEDED' "$out/build-device.log"
+
+# Picks the newest available iPhone simulator on an iOS 26 runtime.
+udid="$(xcrun simctl list devices available -j | python3 -c '
+import json, sys
+devices = json.load(sys.stdin)["devices"]
+runtimes = sorted((r for r in devices if ".iOS-26" in r), key=lambda r: [int(p) for p in r.rsplit("iOS-", 1)[1].split("-")])
+phones = [d for r in reversed(runtimes) for d in devices[r] if d["name"].startswith("iPhone")]
+print(phones[0]["udid"] if phones else "")
+')"
+if [ -z "$udid" ]; then
+    echo "No iOS 26 iPhone simulator is available" >&2
+    xcrun simctl list runtimes >&2
+    exit 1
+fi
+echo "Testing on simulator $udid"
+xcrun simctl boot "$udid" 2>/dev/null || true
+xcrun simctl bootstatus "$udid" -b
+
+# Simulator builds are signed ad hoc so the App Group entitlement is embedded without a team.
+xcodebuild test -project GarageTiles.xcodeproj -scheme GarageTiles -configuration Debug \
+    -destination "platform=iOS Simulator,id=$udid,arch=$(uname -m)" -derivedDataPath "$out/DerivedData-sim" -resultBundlePath "$out/UITests.xcresult" \
+    CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tee "$out/test-sim.log" | grep -E '(error|warning):|Test Case|TEST (SUCCEEDED|FAILED)|Executed' || true
+grep -q 'TEST SUCCEEDED' "$out/test-sim.log"
+
+app="$(find "$out/DerivedData-sim/Build/Products" -maxdepth 2 -name GarageTiles.app -type d | head -1)"
+plutil -p "$app/PlugIns/GarageTilesWidget.appex/Info.plist" | grep -E 'NSExtensionPointIdentifier|CFBundleShortVersionString'
+# Simulator builds keep entitlements in the processed .xcent files rather than in a code signature that codesign can print.
+find "$out/DerivedData-sim/Build/Intermediates.noindex" -name '*.xcent' | sort | while read -r xcent; do
+    echo "$xcent"
+    plutil -p "$xcent"
+done | tee "$out/entitlements.txt"
+for target in GarageTiles.app GarageTilesWidget.appex; do
+    xcent="$(find "$out/DerivedData-sim/Build/Intermediates.noindex" -name "$target-Simulated.xcent" | head -1)"
+    if [ -z "$xcent" ] || ! plutil -p "$xcent" | grep -q '"group.com.example.change-me.GarageTiles"'; then
+        echo "$target is missing the App Group entitlement" >&2
+        exit 1
+    fi
+done
+
+xcrun simctl launch "$udid" com.example.change-me.GarageTiles
+sleep 5
+xcrun simctl io "$udid" screenshot "$out/app-screen.png"
+echo "iOS build, UI tests and entitlement checks passed"

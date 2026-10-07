@@ -1,0 +1,6 @@
+# Reviewed 2026-10-06: the Firebase key is public myQ Android client metadata covered by docs/gatectl-security-review.md, not a user credential.
+vendor/gatectl/src/gatectl/constants.py:gcp-api-key:24
+# Reviewed 2026-10-06: detect-secrets baseline entries are SHA-1 hashes of the constants above, not secrets.
+vendor/gatectl/.secrets.baseline:generic-api-key:142
+vendor/gatectl/.secrets.baseline:generic-api-key:150
+vendor/gatectl/.secrets.baseline:generic-api-key:158

@@ -1,0 +1,2 @@
+// Copy to config/MyQ.local.xcconfig (gitignored) and set the App Check debug token used by the app's sign-in and gatectl login; never commit the real value.
+MYQ_APP_CHECK_DEBUG_TOKEN =

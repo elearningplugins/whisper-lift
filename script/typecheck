@@ -1,0 +1,19 @@
+#!/bin/sh
+# Type-checks the app and widget sources against the macOS SDK with only Command Line Tools; it is not a substitute for an Xcode build against the iOS 26 SDK.
+set -eu
+cd "$(dirname "$0")/../ios/GarageTiles"
+swift build --package-path GarageTilesKit >/dev/null
+modules="$(swift build --package-path GarageTilesKit --show-bin-path)/Modules"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+cp -R Shared GarageTiles GarageTilesWidget "$work/"
+# The #Preview macro plugin ships only with Xcode, so previews are cut from the copies before checking.
+find "$work" -name '*.swift' -exec perl -0pi -e 's/\n#Preview.*\z/\n/s' {} +
+check() {
+    echo "Type-checking $1"
+    (cd "$work" && swiftc -typecheck -swift-version 6 -strict-concurrency=complete -warnings-as-errors \
+        -sdk "$(xcrun --show-sdk-path)" -target "$(uname -m)-apple-macos15.0" -I "$modules" -parse-as-library $2)
+}
+check "widget extension" "Shared/*.swift GarageTilesWidget/*.swift"
+check "app" "Shared/*.swift GarageTiles/*.swift"
+echo "Type-check passed"

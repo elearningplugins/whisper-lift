@@ -1,0 +1,9 @@
+# Muter mutation-testing config for the Kit; run `muter run --skip-update-check` in this directory, see docs/phase-0-spike.md.
+arguments:
+- test
+executable: /usr/bin/swift
+exclude:
+- Package.swift
+- Tests
+- .build
+excludeCalls: []

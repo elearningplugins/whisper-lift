@@ -1,0 +1,13 @@
+# Release scan rules: gitleaks defaults plus a rule for Firebase App Check debug tokens, which the default rules do not recognize.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "firebase-app-check-debug-token"
+description = "Firebase App Check debug token"
+regex = '''(?i)debug_?token[^\n]{0,60}?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'''
+secretGroup = 1
+
+[[rules.allowlists]]
+# Fabricated values used by the tests.
+regexes = ['''00000000-1111-4222-8333-444444444444''']

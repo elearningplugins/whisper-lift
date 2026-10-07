@@ -1,0 +1,41 @@
+name: Bug report
+description: Something in the app, widget, Siri intents or scripts does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "**Do not include** myQ emails, passwords, MFA codes, tokens, the App Check debug token, door serials, account IDs, door or home names, or addresses. Replace them with placeholders. Security problems go to private vulnerability reporting, not here."
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: door-state
+    attributes:
+      label: Door involvement
+      description: Did a door move, fail to move, or move unexpectedly? Was someone watching it?
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Commit SHA, iOS version, Xcode version, and how you ran it (Doors tab, Siri, widget, script).
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted output
+      description: The error message or redacted log lines. Remove every identifier and token.
+      render: text
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Redaction
+      options:
+        - label: I removed all credentials, tokens, serials, account IDs and home details from this report.
+          required: true

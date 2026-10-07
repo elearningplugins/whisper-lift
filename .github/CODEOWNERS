@@ -1,0 +1,9 @@
+# Every change needs the owner's review; the safety, sign-in and gatectl paths are listed separately so they keep an owner if the default changes.
+* @elearningplugins
+/ios/GarageTiles/GarageTilesKit/Sources/GarageDoorKit/ @elearningplugins
+/ios/GarageTiles/Shared/ @elearningplugins
+/vendor/gatectl/ @elearningplugins
+/script/gatectl_session.py @elearningplugins
+/config/ @elearningplugins
+/.github/ @elearningplugins
+/docs/gatectl-security-review.md @elearningplugins

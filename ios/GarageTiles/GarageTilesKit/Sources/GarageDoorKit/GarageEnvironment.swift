@@ -1,0 +1,158 @@
+import Foundation
+
+/** Wires the Keychain, App Group files, refresh lock, myQ client and command service the same way for the app, Siri intents and widget. */
+public struct GarageEnvironment: Sendable {
+    public static let appGroupInfoKey = "GarageTilesAppGroup"
+    public static let keychainGroupInfoKey = "GarageTilesKeychainGroup"
+
+    /** Why signing out stopped; each case says what is still on the device. */
+    public enum SignOutError: Error, Equatable, Sendable, CustomStringConvertible {
+        case sessionNotRemoved
+        case commandInProgress
+        case localDataNotRemoved
+
+        public var description: String {
+            switch self {
+            case .sessionNotRemoved: "The session couldn't be removed. Unlock the iPhone and try again."
+            case .commandInProgress: "Signed out, but a door command is still finishing. Tap Sign out again in a few seconds to delete the saved door data."
+            case .localDataNotRemoved: "Signed out, but the saved door data couldn't be deleted. Tap Sign out again."
+            }
+        }
+    }
+
+    public enum SetupError: Error, Equatable, Sendable {
+        case missingAppGroup
+        case missingKeychainGroup
+        case containerUnavailable
+    }
+
+    public let catalogStore: DoorCatalogStore
+    public let snapshotStore: DoorSnapshotStore
+    public let tokenStore: KeychainTokenStore
+    public let refreshLockURL: URL
+    public let tokens: TokenCoordinator
+    public let client: MyQClient
+    public let importer: SessionImporter
+    public let trafficLog: TrafficLog
+    let commands: DoorCommandService
+    let commandLock: FileCommandLock
+    let transport: any HTTPTransport
+    let configuration: MyQConfiguration?
+
+    public init(
+        dataDirectory: URL,
+        keychainGroup: String,
+        transport: any HTTPTransport = URLSessionTransport(),
+        keychain: any KeychainBackend = SecItemBackend(),
+        configuration: MyQConfiguration? = nil,
+        profile: CommandProfile = .interactive,
+        now: @escaping @Sendable () -> Date = { Date() },
+        sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }
+    ) {
+        catalogStore = DoorCatalogStore(directory: dataDirectory)
+        snapshotStore = DoorSnapshotStore(directory: dataDirectory)
+        tokenStore = KeychainTokenStore(accessGroup: keychainGroup, backend: keychain)
+        refreshLockURL = dataDirectory.appendingPathComponent("refresh.lock", isDirectory: false)
+        trafficLog = TrafficLog(directory: dataDirectory)
+        let transport = MeteredTransport(inner: transport, log: trafficLog, now: now)
+        self.transport = transport
+        self.configuration = configuration
+        tokens = TokenCoordinator(
+            store: tokenStore, lock: DirectoryFileLock(directory: dataDirectory, url: refreshLockURL), refresher: MyQTokenRefresher(transport: transport), now: now
+        )
+        client = MyQClient(transport: transport, tokens: tokens)
+        importer = SessionImporter(store: tokenStore, tokens: tokens)
+        commandLock = FileCommandLock(directory: dataDirectory)
+        commands = DoorCommandService(
+            api: client, snapshots: snapshotStore, commandLock: commandLock, followUpReads: profile.followUpReads, now: now, sleep: sleep
+        )
+    }
+
+    /** Builds the environment from the bundle's Info.plist App Group and Keychain group, as both the app and the widget extension do. */
+    public static func live(bundle: Bundle = .main, profile: CommandProfile = .interactive) throws -> GarageEnvironment {
+        guard let group = bundle.object(forInfoDictionaryKey: appGroupInfoKey) as? String, group.hasPrefix("group."), !group.contains("$(") else {
+            throw SetupError.missingAppGroup
+        }
+        guard let keychainGroup = validatedKeychainGroup(bundle.object(forInfoDictionaryKey: keychainGroupInfoKey)) else {
+            throw SetupError.missingKeychainGroup
+        }
+        guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else { throw SetupError.containerUnavailable }
+        // Only sign-in needs the configuration, so Siri, the widget and door commands keep working without it.
+        let configuration = try? MyQConfiguration(info: bundle.infoDictionary ?? [:])
+        return GarageEnvironment(
+            dataDirectory: container.appendingPathComponent("Doors", isDirectory: true), keychainGroup: keychainGroup, configuration: configuration, profile: profile
+        )
+    }
+
+    /** Accepts only a fully expanded "TEAMID.bundle.prefix" access group. */
+    public static func validatedKeychainGroup(_ raw: Any?) -> String? {
+        guard let value = raw as? String, value == value.trimmingCharacters(in: .whitespacesAndNewlines), value.contains("."), !value.contains("$(") else {
+            return nil
+        }
+        return value
+    }
+
+    /** Runs one Siri or widget request against a door from the catalog and returns the outcome with its spoken dialog. */
+    public func perform(_ request: DoorRequest, on identity: DoorIdentity) async -> (outcome: CommandOutcome, dialog: String) {
+        guard let door = (try? catalogStore.read())?.door(for: identity) else {
+            let outcome = CommandOutcome.refused(.missing)
+            return (outcome, outcome.dialog(doorName: "that garage door"))
+        }
+        let outcome = await commands.perform(request, on: identity, accountName: door.accountName)
+        return (outcome, outcome.dialog(doorName: door.name))
+    }
+
+    /** Re-reads every garage door from myQ and replaces the catalog. */
+    /** Runs the in-app myQ sign-in through the metered transport and saves the new session to the shared Keychain. */
+    public func signIn(with authenticator: any WebAuthenticating, makeState: @escaping @Sendable () -> String = { PKCE.randomToken() }) async throws {
+        try await MyQSignInFlow(transport: transport, tokens: tokens, authenticator: authenticator, configuration: configuration, makeState: makeState).signIn()
+    }
+
+    /** Signs out completely: the session goes first, under the refresh lock, so nothing new can act; then, once no door command is running, every saved door state, the door list and the request log. */
+    public func signOut() async throws {
+        do {
+            try await tokens.signOut()
+        } catch {
+            throw SignOutError.sessionNotRemoved
+        }
+        let doors = ((try? catalogStore.read()) ?? DoorCatalog(doors: [])).doors.map(\.identity)
+        try await whileNoCommandRuns(doors[...]) {
+            do {
+                try snapshotStore.removeAll()
+                try catalogStore.remove()
+                try trafficLog.remove()
+            } catch {
+                throw SignOutError.localDataNotRemoved
+            }
+        }
+    }
+
+    // Holds every listed door's command lock at once, so a command that started before sign-out finishes before its data is deleted.
+    private func whileNoCommandRuns(_ doors: ArraySlice<DoorIdentity>, _ body: @escaping @Sendable () throws -> Void) async throws {
+        guard let door = doors.first else { return try body() }
+        do {
+            try await commandLock.withDoorLock(door) { try await whileNoCommandRuns(doors.dropFirst(), body) }
+        } catch CommandLockError.busy {
+            throw SignOutError.commandInProgress
+        } catch CommandLockError.unavailable {
+            throw SignOutError.localDataNotRemoved
+        }
+    }
+
+    public func discoverDoors() async throws -> DoorCatalog {
+        let catalog = try await DoorDiscovery.discover(using: client)
+        try catalogStore.write(catalog)
+        return catalog
+    }
+}
+
+/** A FileLock that first creates its directory, since the App Group's Doors folder may not exist yet. */
+struct DirectoryFileLock: RefreshLock {
+    let directory: URL
+    let url: URL
+
+    func withLock<T: Sendable>(timeout: Duration, _ body: @Sendable () async throws -> T) async throws -> T {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return try await FileLock(url: url).withLock(timeout: timeout, body)
+    }
+}

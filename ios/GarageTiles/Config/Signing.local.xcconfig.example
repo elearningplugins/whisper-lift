@@ -1,0 +1,3 @@
+// Copy to Signing.local.xcconfig (gitignored) and replace both values; the prefix must be unique to you because Personal Team bundle IDs are global.
+BUNDLE_ID_PREFIX = com.yourname.whisper-lift
+DEVELOPMENT_TEAM = ABCDE12345

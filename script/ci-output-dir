@@ -1,0 +1,17 @@
+#!/bin/sh
+# Prints a CI output directory that is safe to delete: absolute, no "..", final folder named ci, and never / or /ci; otherwise exits 2.
+set -eu
+dir="$1"
+case "$dir" in
+    /*) ;;
+    *) echo "CI output directory must be absolute: $dir" >&2; exit 2 ;;
+esac
+case "$dir" in
+    */../*|*/..|*/./*|*/.) echo "CI output directory must not contain . or .. segments: $dir" >&2; exit 2 ;;
+esac
+trimmed="${dir%/}"
+if [ "$(basename "$trimmed")" != "ci" ] || [ "$trimmed" = "/ci" ] || [ "$(dirname "$trimmed")" = "/" ]; then
+    echo "CI output directory must be a folder named ci below a parent directory: $dir" >&2
+    exit 2
+fi
+printf '%s\n' "$trimmed"

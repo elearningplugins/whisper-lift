@@ -1,0 +1,10 @@
+// Shared defaults; personal values go in the untracked Signing.local.xcconfig created from Signing.local.xcconfig.example.
+BUNDLE_ID_PREFIX = com.example.change-me
+DEVELOPMENT_TEAM =
+GARAGE_TILES_APP_GROUP = group.$(BUNDLE_ID_PREFIX).GarageTiles
+
+#include? "Signing.local.xcconfig"
+
+// Sign-in settings come from the repository-wide local file shared with the gatectl session wrapper; see config/MyQ.local.xcconfig.example.
+MYQ_APP_CHECK_DEBUG_TOKEN =
+#include? "../../../config/MyQ.local.xcconfig"
