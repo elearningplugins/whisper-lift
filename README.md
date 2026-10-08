@@ -16,6 +16,11 @@ A personal iPhone app ("Whisper Lift", internally `GarageTiles`) that opens and 
 1. Test Siri, supervised: *"close small door with Whisper Lift"*, unlocked, locked, then in the car. Siri routes phrases containing "garage" to Apple Home, so use the door nicknames.
 2. Reinstall from Xcode before the free signing profile expires every seven days.
 
+## Limits
+
+- **Not for App Store or public distribution.** Sign-in relies on a Firebase App Check debug token that the build places in the app's Info.plist, where anyone with the app could extract it. Firebase says debug tokens must never ship in production apps. A distributable version would need an authorized production sign-in path from Chamberlain; no configuration trick can make a static secret safe inside an iPhone app.
+- **Sign-in needs local configuration this project doesn't provide.** See [CONTRIBUTING.md](CONTRIBUTING.md). Without it the app builds and runs, but can't sign in.
+
 ## Tests
 
 ```sh

@@ -6,7 +6,7 @@ Thanks for helping. This app moves real garage doors, so changes are reviewed fo
 
 1. Install **Xcode 26** (iOS 26 SDK) and XcodeGen (`brew install xcodegen`). Python 3.11 or newer runs the gatectl tests.
 2. Copy `ios/GarageTiles/Config/Signing.local.xcconfig.example` to `Signing.local.xcconfig`, and set your team ID and a bundle ID prefix unique to you.
-3. To use **Sign in with myQ**, copy `config/MyQ.local.xcconfig.example` to `config/MyQ.local.xcconfig` and set the App Check debug token. The project does not distribute this value. Without it, everything except sign-in still builds, runs and passes the tests.
+3. **Sign-in needs a value this project doesn't provide.** A clean clone builds, runs and passes every test without it, but **Sign in with myQ** shows "not set up". Sign-in needs a Firebase App Check debug token in `config/MyQ.local.xcconfig` (see the `.example`), and this project does not distribute, explain how to obtain, or authorize the use of any such credential. Whisper Lift is an unsupported personal integration with an undocumented service, not a turnkey myQ client or SDK.
 4. Run `xcodegen generate` in `ios/GarageTiles`. The Xcode project is generated, so edit `project.yml`, never the `.xcodeproj`.
 
 [docs/phase-0-spike.md](docs/phase-0-spike.md) has the full device setup.
@@ -23,6 +23,7 @@ Every check runs offline. None of them signs anything, contacts myQ, or moves a 
 | `script/ci-ios` | iOS build plus Simulator UI and accessibility tests (needs about 11 GB of free disk) |
 | `script/gatectl-test` | gatectl tests with the network blocked |
 | `python3 script/gatectl_mutants.py` | Mutation check of the gatectl safety guards |
+| `script/check-gitleaks-rule <gitleaks>` | Proves the App Check debug-token scan rule still catches fake tokens; CI runs it before every secret scan |
 | `python3 script/kit_mutants.py` | Mutation check of the app's status, card, sign-out, export and sign-in logic; every mutant must be killed |
 
 CI runs all of these on every pull request.
