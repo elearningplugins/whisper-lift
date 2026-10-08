@@ -52,8 +52,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - name: Scan history and tree with gitleaks 8.30.1
+      - name: Install gitleaks 8.30.1
+        run: script/install-gitleaks "$RUNNER_TEMP"
+      # Every pull request uses the App Check debug-token rule too, so a leaked token is caught before merge instead of by the weekly release scan.
+      - name: Prove the debug-token rule still catches fake tokens
+        run: script/check-gitleaks-rule "$RUNNER_TEMP/gitleaks"
+      - name: Scan history and tree
         run: |
-          script/install-gitleaks "$RUNNER_TEMP"
-          "$RUNNER_TEMP/gitleaks" git --no-banner --redact .
-          "$RUNNER_TEMP/gitleaks" dir --no-banner --redact .
+          "$RUNNER_TEMP/gitleaks" git --no-banner --redact --config .github/gitleaks-release.toml .
+          "$RUNNER_TEMP/gitleaks" dir --no-banner --redact --config .github/gitleaks-release.toml .

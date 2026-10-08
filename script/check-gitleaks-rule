@@ -1,0 +1,26 @@
+#!/bin/sh
+# Proves the App Check debug-token rule rejects freshly generated fake tokens and still accepts the test fixture, so a broken rule cannot silently pass every scan.
+set -eu
+gitleaks="${1:?usage: script/check-gitleaks-rule <path to gitleaks>}"
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+config="$repo/.github/gitleaks-release.toml"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+fake="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+# Each shape a real leak could take: the xcconfig setting, the Swift and JSON spellings, and the old Python constant.
+for line in "MYQ_APP_CHECK_DEBUG_TOKEN = $fake" "let debugToken = \"$fake\"" "{\"debugToken\": \"$fake\"}" "FIREBASE_DEBUG_TOKEN = \"$(echo "$fake" | tr 'a-f' 'A-F')\""; do
+    printf '%s\n' "$line" > "$work/leak.txt"
+    # The finding must come from this project's own rule; gitleaks' generic defaults catch some shapes too and would hide a broken rule.
+    "$gitleaks" dir --no-banner --redact --config "$config" --report-format json --report-path "$work/report.json" "$work/leak.txt" >/dev/null 2>&1 || true
+    if ! grep -q '"RuleID": "firebase-app-check-debug-token"' "$work/report.json"; then
+        echo "check-gitleaks-rule: the debug-token rule missed a leak: ${line%%=*}" >&2
+        exit 1
+    fi
+    rm -f "$work/report.json"
+done
+printf 'debugToken = "00000000-1111-4222-8333-444444444444"\n' > "$work/leak.txt"
+if ! "$gitleaks" dir --no-banner --redact --config "$config" "$work/leak.txt" >/dev/null 2>&1; then
+    echo "check-gitleaks-rule: the fabricated test fixture is no longer allowed" >&2
+    exit 1
+fi
+echo "check-gitleaks-rule: the debug-token rule catches fake tokens and allows the test fixture"
