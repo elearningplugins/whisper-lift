@@ -6,10 +6,10 @@ Whisper Lift has no server, analytics, telemetry, crash reporting, or advertisin
 
 | Data | Where | Notes |
 | --- | --- | --- |
-| myQ access and refresh token | iOS Keychain, in the app's shared access group | Available after first unlock, this device only, never synced to iCloud. Siri and the widget read it from the same group. |
-| Door list: account ID, account name, door serial numbers, door names, Siri nicknames | App Group container | Used to match Siri phrases and show the Doors tab. |
-| Last known door state, and the time and result of the last command | App Group container | Shown on the Doors tab and the widget. |
-| myQ request log: time, method, host, endpoint, status, estimated byte counts | App Group container, last 500 requests | Endpoints are stored as templates, with `{account}` and `{serial}` in place of the IDs. Bodies, headers and tokens are never logged. **Export request log (JSON)** on the Doors tab shares it. |
+| myQ access and refresh token | iOS Keychain, in the app's shared access group | Available after first unlock, this device only, never synced to iCloud. Siri reads it from the same group. |
+| Door list: account ID, account name, door serial numbers, door names, Siri nicknames | App Group container | Used to match Siri phrases and show the door cards. |
+| Last known door state, and the time and result of the last command | App Group container | Shown on the door cards. |
+| myQ request log: time, method, host, endpoint, status, estimated byte counts | App Group container, last 500 requests | Endpoints are stored as templates, with `{account}` and `{serial}` in place of the IDs. Bodies, headers and tokens are never logged. **Export request log (JSON)** on the door cards shares it. |
 
 The app never sees your myQ password or MFA code. **Sign in with myQ** opens myQ's own page in an ephemeral system browser session, which keeps no cookies afterwards, and the app receives only the resulting session.
 
@@ -29,7 +29,7 @@ Requests to any other host are refused in code.
 
 ## Signing out and deleting data
 
-- **Sign out** on the Doors tab deletes everything the app saved on the iPhone: the token, the door list, the last door states and the request log. It removes the token first, so nothing can act while it finishes. If a door command is still running, it waits for that command and tells you to tap **Sign out** again. Siri, the widget, and the app stop working until you sign in again.
+- **Sign out** in Settings (tap the moon) deletes everything the app saved on the iPhone: the token, the door list, the last door states and the request log. It removes the token first, so nothing can act while it finishes. If a door command is still running, it waits for that command and tells you to tap **Sign out** again. Siri and the app stop working until you sign in again.
 - Deleting the app removes its App Group data. iOS can keep Keychain items after an app is deleted, so tap **Sign out** first.
 - To end the session on myQ's side too, change your myQ password or sign out of all devices in the myQ app.
 

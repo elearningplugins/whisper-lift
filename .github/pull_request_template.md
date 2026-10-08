@@ -34,7 +34,7 @@
 2. What is the performance and network impact (requests, bytes, latency)?
 3. What could still be wrong here?
 4. What else changed that is not obvious?
-5. Which adjacent behavior shares this code path: Siri intents, the widget, the Doors tab, the token refresh, gatectl?
+5. Which adjacent behavior shares this code path: Siri intents, the door cards, Settings, the status checks, the token refresh, gatectl?
 6. Does this touch door commands, safety checks, sign-in, tokens, hosts, or `vendor/gatectl`? If so, how is that covered?
 
 ## Known limitations and unverified assumptions

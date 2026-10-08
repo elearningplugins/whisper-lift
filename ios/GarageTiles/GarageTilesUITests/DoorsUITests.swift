@@ -8,6 +8,8 @@ final class DoorsUITests: XCTestCase {
     private func launch() {
         continueAfterFailure = false
         app = XCUIApplication()
+        // Starts signed out on throwaway storage that can't reach myQ, so the tests never touch a real session or door.
+        app.launchArguments.append("-WhisperLiftUITestSandbox")
         app.launch()
     }
 

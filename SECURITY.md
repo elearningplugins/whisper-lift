@@ -30,7 +30,7 @@ There are no releases. Only the latest commit on `main` is supported.
 
 **In scope:**
 
-- the iOS app and widget;
+- the iOS app and its Siri intents;
 - `GarageDoorKit`;
 - the scripts in `script/`;
 - the security patches to `vendor/gatectl`.

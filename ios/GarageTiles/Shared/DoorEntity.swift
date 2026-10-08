@@ -45,6 +45,6 @@ struct DoorQuery: EnumerableEntityQuery, EntityStringQuery {
     }
 
     private static func catalog() throws -> DoorCatalog {
-        try GarageEnvironment.live().catalogStore.read()
+        try AppEnvironment.current().catalogStore.read()
     }
 }

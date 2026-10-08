@@ -18,7 +18,7 @@ Every check runs offline. None of them signs anything, contacts myQ, or moves a 
 | Command | What it does |
 | --- | --- |
 | `script/test` | Swift Testing suite, including seeded property tests, with warnings as errors |
-| `script/typecheck` | Type-checks the app and widget sources |
+| `script/typecheck` | Type-checks the app sources |
 | `script/sanitize` | Runs the package tests under Thread, Address and Undefined Behavior sanitizers |
 | `script/ci-ios` | iOS build plus Simulator UI and accessibility tests (needs about 11 GB of free disk) |
 | `script/gatectl-test` | gatectl tests with the network blocked |
