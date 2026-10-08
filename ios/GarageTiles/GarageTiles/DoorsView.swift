@@ -384,8 +384,8 @@ struct TokenImport: View {
             }
             .padding(.top, 8)
         }
+        // No identifier on this container: outside a List, SwiftUI passes it down to the children and the token field would lose its own.
         .font(Theme.font(.body))
-        .accessibilityIdentifier("advancedTokenImport")
     }
 }
 
