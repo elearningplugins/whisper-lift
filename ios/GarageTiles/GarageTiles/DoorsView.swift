@@ -28,6 +28,7 @@ final class DoorsModel {
     var signInProblem: String?
     var findResult: String?
     var flashes: [DoorIdentity: String] = [:]
+    var checkingStatus = false
     private var flashTasks: [DoorIdentity: Task<Void, Never>] = [:]
     let setupProblem: String?
     private let environment: GarageEnvironment?
@@ -103,10 +104,21 @@ final class DoorsModel {
         return true
     }
 
-    /** The shareable JSON request log, offered once the log has entries. */
+    /** The shareable JSON request log, offered whenever the app is signed in, as the design's header shows. */
     var requestLogExport: RequestLogExport? {
-        guard let environment, traffic != nil else { return nil }
+        guard let environment, session == .signedIn else { return nil }
         return RequestLogExport(log: environment.trafficLog, appVersion: RequestLogExport.appVersion())
+    }
+
+    /** Reads every door's live state from myQ, so the cards never show an old state as current; one request per account and never a command. */
+    func refreshStatus() async {
+        guard let environment, session == .signedIn, !catalog.doors.isEmpty, !checkingStatus else { return }
+        checkingStatus = true
+        defer { checkingStatus = false }
+        let result = await environment.refreshStatus()
+        if result == .signInRequired { announce(CommandOutcome.signInRequired.dialog(doorName: "")) }
+        WidgetCenter.shared.reloadAllTimelines()
+        reload()
     }
 
     func findDoors() async {
@@ -130,6 +142,7 @@ final class DoorsModel {
         }
         announce(findResult)
         reload()
+        await refreshStatus()
     }
 
     func perform(_ request: DoorRequest, on door: CatalogDoor) async {
@@ -204,113 +217,41 @@ final class DoorsModel {
     }
 }
 
-/** Setup and control for the real doors, laid out like the app design: sign in, find doors, door cards, then Siri, the request log and the account. */
+/** The home screen from the app design: the moon-and-bats header with Export JSON, then the door cards; everything else lives in Settings behind the moon. */
 struct DoorsView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model = DoorsModel()
-    @State private var token = ""
-    @State private var showTokenImport = false
-    @State private var confirmingSignOut = false
-    @AppStorage("siriTip.closeDoor.visible") private var showSiriTip = true
+    @State private var showSettings = false
 
     var body: some View {
-        NavigationStack {
-            Form {
-                if let problem = model.setupProblem {
-                    Section { Text(problem).foregroundStyle(.red) }
-                }
-                if model.session != .signedIn {
-                    signInSection
-                }
-                doorsSection
-                if !model.catalog.doors.isEmpty {
-                    siriSection
-                }
-                lockedPhoneSection
-                if model.requestCount > 0 {
-                    requestLogSection
-                }
-                accountSection
-            }
-            .navigationTitle("Garage Doors")
-            .refreshable { model.reload() }
-            .confirmationDialog("Sign out and delete?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
-                Button("Sign out", role: .destructive) { Task { await model.signOut() } }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This deletes everything the app saved: your sign-in, doors, nicknames and request log.")
-            }
-        }
-        .onAppear { model.reload() }
-    }
-
-    private var signInSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Open your garage with one tap").font(.title2.bold())
-                Text("Sign in with your myQ account to find your doors.")
-            }
-            .padding(.vertical, 4)
-            if let problem = model.signInProblem {
-                Text(problem).foregroundStyle(.primary).accessibilityIdentifier("signInProblem")
-            }
-            Button("Sign in with myQ") { Task { await model.signIn() } }
-                .font(.headline)
-                .disabled(model.setupProblem != nil || model.busy)
-                .accessibilityIdentifier("signInButton")
-            tokenImport
-            messageRow
-        } header: {
-            header("Sign in")
-        } footer: {
-            Text("You\u{2019}ll sign in on myQ\u{2019}s own page. Your password and verification code go to myQ, not to this app.")
-                .foregroundStyle(.primary)
-        }
-    }
-
-    private var tokenImport: some View {
-        DisclosureGroup("Advanced: import a token", isExpanded: $showTokenImport) {
-            SecureField("Paste a myQ token", text: $token)
-                .textContentType(.password)
-                .autocorrectionDisabled()
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                #endif
-                .accessibilityIdentifier("tokenField")
-            Button("Import token") {
-                let pasted = token
-                Task {
-                    if await model.importToken(pasted) { token = "" }
-                }
-            }
-            .disabled(token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
-            .accessibilityIdentifier("importTokenButton")
-        }
-        .accessibilityIdentifier("advancedTokenImport")
-    }
-
-    private var doorsSection: some View {
-        Section {
-            if model.findingDoors {
-                HStack(spacing: 12) {
-                    ProgressView()
-                    VStack(alignment: .leading) {
-                        Text("Finding your doors\u{2026}").font(.headline)
-                        Text("Asking myQ which garage doors are on your account.").font(.footnote)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if model.session == .signedIn {
+                    ThemeHeader(openSettings: { showSettings = true }) {
+                        if let export = model.requestLogExport {
+                            ShareLink(item: export, preview: SharePreview("Whisper Lift request log")) {
+                                Label("Export JSON", systemImage: "square.and.arrow.down")
+                                    .font(Theme.font(.headline, .bold))
+                                    .padding(.horizontal, 18)
+                                    .frame(minHeight: 52)
+                                    .background(Theme.surface, in: Capsule())
+                                    .overlay(Capsule().strokeBorder(Theme.muted, lineWidth: 2))
+                            }
+                            .foregroundStyle(Theme.text)
+                            .accessibilityIdentifier("exportRequestLogButton")
+                        }
                     }
                 }
-                .accessibilityElement(children: .combine)
-            } else if let result = model.findResult {
-                Text(result).foregroundStyle(.primary).accessibilityIdentifier("findResult")
-            }
-            if model.catalog.doors.isEmpty, !model.findingDoors {
-                Text("No doors yet. Sign in with myQ to find them.")
-                    .foregroundStyle(.primary)
-                    .accessibilityIdentifier("noDoorsMessage")
-            }
-            // Ages like "Updated 2 min ago" refresh on their own while the screen is open.
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                VStack(spacing: 16) {
-                    ForEach(model.catalog.doors, id: \.identity) { door in
+                if let problem = model.setupProblem {
+                    Text(problem).font(Theme.font(.body)).foregroundStyle(Theme.amber)
+                }
+                if model.session != .signedIn {
+                    SignInPanel(model: model)
+                }
+                statusLine
+                ForEach(model.catalog.doors, id: \.identity) { door in
+                    // Ages like "Updated 2 min ago" and the switch to "Last known" happen on their own while the screen is open.
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
                         DoorCardView(
                             door: door, card: DoorCard(snapshot: model.snapshots[door.identity], now: context.date), flash: model.flashes[door.identity],
                             enabled: model.session == .signedIn && !model.busy,
@@ -320,29 +261,233 @@ struct DoorsView: View {
                     }
                 }
             }
-            .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-            .listRowBackground(Color.clear)
-            if model.session == .signedIn {
-                Button("Find doors") { Task { await model.findDoors() } }
-                    .disabled(model.busy)
-            }
-        } header: {
-            header("Doors")
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
+        }
+        .background(Theme.background.ignoresSafeArea())
+        .foregroundStyle(Theme.text)
+        .refreshable { await model.refreshStatus() }
+        .task { await model.refreshStatus() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await model.refreshStatus() } }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(model: model)
         }
     }
 
-    private var siriSection: some View {
-        Section {
-            Text(siriExample).foregroundStyle(.primary).accessibilityIdentifier("siriExample")
-            #if os(iOS)
-            if let first = model.catalog.doors.first {
-                SiriTipView(intent: CloseDoorIntent(door: DoorEntity(first)), isVisible: $showSiriTip)
-                    .accessibilityIdentifier("siriTip")
+    @ViewBuilder private var statusLine: some View {
+        if model.findingDoors {
+            HStack(spacing: 12) {
+                ProgressView().tint(Theme.soft)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Finding your doors\u{2026}").font(Theme.font(.headline, .bold))
+                    Text("Asking myQ which garage doors are on your account.").font(Theme.font(.footnote))
+                }
             }
-            #endif
-        } header: {
-            header("Siri")
+            .accessibilityElement(children: .combine)
+        } else if model.checkingStatus {
+            HStack(spacing: 8) {
+                ProgressView().tint(Theme.soft)
+                Text("Checking your doors\u{2026}").font(Theme.font(.footnote))
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("checkingStatus")
+        } else if let result = model.findResult, model.catalog.doors.isEmpty {
+            Text(result).font(Theme.font(.body)).accessibilityIdentifier("findResult")
         }
+    }
+}
+
+/** The design's sign-in screen: a headline, the myQ button, the privacy note and the advanced token import. */
+struct SignInPanel: View {
+    let model: DoorsModel
+    @State private var token = ""
+    @State private var showTokenImport = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Moon().frame(width: 76, height: 76).frame(maxWidth: .infinity, alignment: .trailing)
+            Text("Open your garage with one tap").font(Theme.font(.largeTitle, .bold))
+            Text("Sign in with your myQ account to find your doors.").font(Theme.font(.title3))
+            if let problem = model.signInProblem {
+                Text(problem).font(Theme.font(.body)).foregroundStyle(Theme.amber).accessibilityIdentifier("signInProblem")
+            }
+            Button { Task { await model.signIn() } } label: {
+                Text("Sign in with myQ").font(Theme.font(.title3, .bold)).frame(maxWidth: .infinity, minHeight: 56)
+            }
+            .buttonStyle(.borderedProminent)
+            .foregroundStyle(Theme.background)
+            .disabled(model.setupProblem != nil || model.busy)
+            .accessibilityIdentifier("signInButton")
+            Text("You\u{2019}ll sign in on myQ\u{2019}s own page. Your password and verification code go to myQ, not to this app.")
+                .font(Theme.font(.footnote))
+                .foregroundStyle(Theme.soft)
+            TokenImport(model: model, token: $token, isExpanded: $showTokenImport)
+            if let message = model.message {
+                Text(message).font(Theme.font(.footnote)).accessibilityIdentifier("importMessage")
+            }
+        }
+        .padding(.top, 8)
+    }
+}
+
+/** The advanced token paste, kept as a fallback to signing in. */
+struct TokenImport: View {
+    let model: DoorsModel
+    @Binding var token: String
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        DisclosureGroup("Advanced: import a token", isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 12) {
+                SecureField("Paste a myQ token", text: $token)
+                    .textContentType(.password)
+                    .autocorrectionDisabled()
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    #endif
+                    .padding(12)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
+                    .accessibilityIdentifier("tokenField")
+                Button("Import token") {
+                    let pasted = token
+                    Task {
+                        if await model.importToken(pasted) { token = "" }
+                    }
+                }
+                .disabled(token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.busy)
+                .accessibilityIdentifier("importTokenButton")
+            }
+            .padding(.top, 8)
+        }
+        .font(Theme.font(.body))
+        .accessibilityIdentifier("advancedTokenImport")
+    }
+}
+
+/** The design's Settings page: Siri, the locked-phone note, the request log, finding doors and the account. */
+struct SettingsView: View {
+    let model: DoorsModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var token = ""
+    @State private var showTokenImport = false
+    @State private var confirmingSignOut = false
+    @AppStorage("siriTip.closeDoor.visible") private var showSiriTip = true
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if !model.catalog.doors.isEmpty {
+                    Section {
+                        Text(siriExample).accessibilityIdentifier("siriExample")
+                        #if os(iOS)
+                        if let first = model.catalog.doors.first {
+                            SiriTipView(intent: CloseDoorIntent(door: DoorEntity(first)), isVisible: $showSiriTip)
+                                .accessibilityIdentifier("siriTip")
+                        }
+                        #endif
+                    } header: {
+                        header("Siri")
+                    }
+                }
+                Section {
+                    Text("Siri and the door cards work while the iPhone is locked. Anyone who can use Siri or CarPlay with this phone can open the doors. Sign out to stop that.")
+                        .accessibilityIdentifier("lockedPhoneWarning")
+                } footer: {
+                    #if os(iOS)
+                    // Opens Whisper Lift's page in the Shortcuts app, which lists every phrase Siri accepts.
+                    ShortcutsLink()
+                        .accessibilityIdentifier("shortcutsLink")
+                    #endif
+                }
+                Section {
+                    LabeledContent {
+                        Text("\(model.requestCount) request\(model.requestCount == 1 ? "" : "s") saved").accessibilityIdentifier("requestCount")
+                    } label: {
+                        Text("Every request to myQ")
+                    }
+                    if let traffic = model.traffic {
+                        LabeledContent {
+                            Text(traffic).accessibilityIdentifier("trafficSummary")
+                        } label: {
+                            Text("Last myQ exchange")
+                        }
+                    }
+                    if let export = model.requestLogExport {
+                        ShareLink(item: export, preview: SharePreview("Whisper Lift request log")) {
+                            Label("Export JSON", systemImage: "square.and.arrow.down")
+                        }
+                    }
+                } header: {
+                    header("Request log")
+                }
+                Section {
+                    if model.session == .signedIn {
+                        Button("Find doors") { Task { await model.findDoors() } }
+                            .disabled(model.busy)
+                    }
+                    if let result = model.findResult {
+                        Text(result).accessibilityIdentifier("findResult")
+                    }
+                } header: {
+                    header("Doors")
+                }
+                Section {
+                    // The label is a separate view so the value keeps its own accessibility label.
+                    LabeledContent {
+                        Text(sessionText).accessibilityIdentifier("sessionStatus")
+                    } label: {
+                        Text("Status")
+                    }
+                    if model.session == .signedIn {
+                        Button("Sign in to myQ again") { Task { await model.signIn() } }
+                            .disabled(model.setupProblem != nil || model.busy)
+                        TokenImport(model: model, token: $token, isExpanded: $showTokenImport)
+                        if let message = model.message {
+                            Text(message).accessibilityIdentifier("importMessage")
+                        }
+                    }
+                    if model.offerClipboardClear {
+                        Button("Clear the clipboard") { model.clearClipboard() }
+                    }
+                    if model.hasLocalData {
+                        Button("Sign out", role: .destructive) { confirmingSignOut = true }
+                            .disabled(model.busy)
+                            .accessibilityIdentifier("signOutButton")
+                    }
+                } header: {
+                    header("Account")
+                }
+                .listRowBackground(Theme.surface)
+            }
+            .font(Theme.font(.body))
+            .scrollContentBackground(.hidden)
+            .background(Theme.background)
+            .navigationTitle("Settings")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }.accessibilityIdentifier("settingsDone")
+                }
+            }
+            .confirmationDialog("Sign out and delete?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+                Button("Sign out", role: .destructive) {
+                    Task {
+                        await model.signOut()
+                        dismiss()
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This deletes everything the app saved: your sign-in, doors, nicknames and request log.")
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    // Bold headline type counts as large text, which clears the contrast audit with margin.
+    private func header(_ title: String) -> some View {
+        Text(title).font(Theme.font(.headline, .bold)).foregroundStyle(Theme.soft)
     }
 
     // The design's examples left out the app name and said "garage", which sends Siri to Apple Home; these are the phrases that work.
@@ -353,87 +498,6 @@ struct DoorsView: View {
         return "Say \u{201C}Open \(first) with Whisper Lift\u{201D} or \u{201C}Close \(second) with Whisper Lift\u{201D}."
     }
 
-    private var lockedPhoneSection: some View {
-        Section {
-            Text("Siri and these buttons work while the iPhone is locked. Anyone who can use Siri or CarPlay with this phone can open the doors. Sign out to stop that.")
-                .font(.footnote)
-                .accessibilityIdentifier("lockedPhoneWarning")
-        } footer: {
-            #if os(iOS)
-            // Opens Whisper Lift's page in the Shortcuts app, which lists every phrase Siri accepts.
-            ShortcutsLink()
-                .accessibilityIdentifier("shortcutsLink")
-            #endif
-        }
-    }
-
-    private var requestLogSection: some View {
-        Section {
-            LabeledContent {
-                Text("\(model.requestCount) request\(model.requestCount == 1 ? "" : "s") saved").foregroundStyle(.primary).accessibilityIdentifier("requestCount")
-            } label: {
-                Text("Every request to myQ")
-            }
-            if let traffic = model.traffic {
-                LabeledContent {
-                    Text(traffic).foregroundStyle(.primary).accessibilityIdentifier("trafficSummary")
-                } label: {
-                    Text("Last myQ exchange")
-                }
-                .font(.footnote)
-            }
-            if let export = model.requestLogExport {
-                ShareLink(item: export, preview: SharePreview("Whisper Lift request log")) {
-                    Label("Export JSON", systemImage: "square.and.arrow.up")
-                }
-                .accessibilityIdentifier("exportRequestLogButton")
-            }
-        } header: {
-            header("Request log")
-        }
-    }
-
-    private var accountSection: some View {
-        Section {
-            // The label is a separate view, as on the Spike tab, so the value keeps its own accessibility label.
-            LabeledContent {
-                Text(sessionText).foregroundStyle(.primary).accessibilityIdentifier("sessionStatus")
-            } label: {
-                Text("Status")
-            }
-            if model.session == .signedIn {
-                Button("Sign in to myQ again") { Task { await model.signIn() } }
-                    .disabled(model.setupProblem != nil || model.busy)
-                tokenImport
-            }
-            if model.session == .signedIn {
-                messageRow
-            }
-            if model.offerClipboardClear {
-                Button("Clear the clipboard") { model.clearClipboard() }
-            }
-            if model.hasLocalData {
-                Button("Sign out", role: .destructive) { confirmingSignOut = true }
-                    .disabled(model.busy)
-                    .accessibilityIdentifier("signOutButton")
-            }
-        } header: {
-            header("Account")
-        }
-    }
-
-    // Import and sign-out results appear under the section the person just used, so they are on screen without scrolling.
-    @ViewBuilder private var messageRow: some View {
-        if let message = model.message {
-            Text(message).font(.footnote).accessibilityIdentifier("importMessage")
-        }
-    }
-
-    // Bold headline type counts as large text, which clears the contrast audit with margin.
-    private func header(_ title: String) -> some View {
-        Text(title).font(.headline).foregroundStyle(.primary)
-    }
-
     private var sessionText: String {
         switch model.session {
         case .signedIn: "Signed in to myQ"
@@ -442,7 +506,6 @@ struct DoorsView: View {
         }
     }
 }
-
 /** One door drawn the way the design shows it: a filled card you tap for closed, open and moving, or an outlined problem card with the app's Open and Close buttons. */
 struct DoorCardView: View {
     let door: CatalogDoor
@@ -466,10 +529,10 @@ struct DoorCardView: View {
 
     private var filledCard: some View {
         VStack(spacing: 10) {
-            Text(door.name).font(.title3.bold())
+            Text(door.name).font(Theme.font(.title3, .bold))
             Image(systemName: DoorCardStyle.symbol(card.icon)).font(.system(size: 56, weight: .regular)).accessibilityHidden(true)
-            Text(card.title).font(.title2.bold())
-            Text(flash ?? card.detail).font(.body.weight(.semibold))
+            Text(card.title).font(Theme.font(.title2, .bold))
+            Text(flash ?? card.detail).font(Theme.font(.body, .semibold))
         }
         .multilineTextAlignment(.center)
         .foregroundStyle(.white)
@@ -482,12 +545,12 @@ struct DoorCardView: View {
     private var problemCard: some View {
         let accent = DoorCardStyle.accent(card.tone)
         return VStack(alignment: .leading, spacing: 10) {
-            Text(door.name).font(.title3.bold()).foregroundStyle(DoorCardStyle.text)
+            Text(door.name).font(Theme.font(.title3, .bold)).foregroundStyle(DoorCardStyle.text)
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: DoorCardStyle.symbol(card.icon)).font(.title).foregroundStyle(accent).accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(card.title).font(.title3.bold()).foregroundStyle(card.tone == .warning ? accent : DoorCardStyle.text)
-                    Text(flash ?? card.detail).foregroundStyle(DoorCardStyle.text)
+                    Text(card.title).font(Theme.font(.title3, .bold)).foregroundStyle(card.tone == .warning ? accent : DoorCardStyle.text)
+                    Text(flash ?? card.detail).font(Theme.font(.body)).foregroundStyle(DoorCardStyle.text)
                 }
             }
             if card.icon != .signIn {
@@ -515,22 +578,22 @@ struct DoorCardView: View {
     }
 }
 
-/** The design's palette and icons; white on these fills keeps at least 4.5:1 contrast. */
+/** Maps a card's tone and icon to the theme's colors and SF Symbols; white on each fill keeps at least 4.5:1 contrast. */
 enum DoorCardStyle {
-    static let background = Color(red: 0x24 / 255, green: 0x1B / 255, blue: 0x2F / 255)
-    static let text = Color(red: 0xF4 / 255, green: 0xEB / 255, blue: 0xFF / 255)
+    static let background = Theme.surface
+    static let text = Theme.text
 
     static func fill(_ tone: DoorCard.Tone) -> Color {
         switch tone {
-        case .closed: Color(red: 0xB4 / 255, green: 0x23 / 255, blue: 0x18 / 255)
-        case .open: Color(red: 0x06 / 255, green: 0x76 / 255, blue: 0x47 / 255)
-        case .moving: Color(red: 0x6B / 255, green: 0x3F / 255, blue: 0xA0 / 255)
-        case .warning, .neutral: background
+        case .closed: Theme.closed
+        case .open: Theme.open
+        case .moving: Theme.moving
+        case .warning, .neutral: Theme.surface
         }
     }
 
     static func accent(_ tone: DoorCard.Tone) -> Color {
-        tone == .warning ? Color(red: 0xFD / 255, green: 0xB0 / 255, blue: 0x22 / 255) : Color(red: 0xD0 / 255, green: 0xC6 / 255, blue: 0xE0 / 255)
+        tone == .warning ? Theme.amber : Theme.soft
     }
 
     static func symbol(_ icon: DoorCard.Icon) -> String {

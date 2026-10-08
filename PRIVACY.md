@@ -21,7 +21,7 @@ All requests use HTTPS, follow no redirects, and keep no cookies or cache.
 | --- | --- |
 | `partner-identity.myq-cloud.com` | Sign-in page, token exchange, token refresh |
 | `accounts.myq-cloud.com` | List your myQ accounts |
-| `devices.myq-cloud.com` | Read door state |
+| `devices.myq-cloud.com` | Read door state: one request per account when the app opens, returns to the foreground or is pulled down, and before each command |
 | `account-devices-gdo.myq-cloud.com` | Open and close commands |
 | `firebaseappcheck.googleapis.com` | One App Check exchange at sign-in |
 

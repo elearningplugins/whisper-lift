@@ -36,6 +36,11 @@ targets:
         CFBundleDisplayName: Whisper Lift
         # Filled from the ignored config/MyQ.local.xcconfig; only the app's sign-in reads it.
         MyQAppCheckDebugToken: "$(MYQ_APP_CHECK_DEBUG_TOKEN)"
+        # Atkinson Hyperlegible Next from the app design, SIL Open Font License 1.1 (GarageTiles/Fonts/OFL-AtkinsonHyperlegibleNext.txt).
+        UIAppFonts:
+          - AtkinsonHyperlegibleNext-Regular.ttf
+          - AtkinsonHyperlegibleNext-SemiBold.ttf
+          - AtkinsonHyperlegibleNext-Bold.ttf
         GarageTilesKeychainGroup: "$(AppIdentifierPrefix)$(BUNDLE_ID_PREFIX).GarageTiles"
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"

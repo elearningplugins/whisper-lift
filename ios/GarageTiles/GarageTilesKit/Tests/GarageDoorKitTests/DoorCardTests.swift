@@ -51,11 +51,34 @@ private func card(_ snapshot: DoorSnapshot?) -> DoorCard { DoorCard(snapshot: sn
         (3600, "Updated 1 hr ago"), (7200, "Updated 2 hr ago"), (86_400, "Updated 1 day ago"), (259_200, "Updated 3 days ago"),
     ])
     func updatedTextReadsNaturally(_ seconds: TimeInterval, _ expected: String) {
-        #expect(card(snapshot(.closed, fetchedSecondsAgo: seconds)).detail == expected)
+        #expect(DoorCard.updatedText(seconds) == expected)
     }
 
     @Test func aFutureFetchTimeReadsAsJustNow() {
         #expect(card(snapshot(.closed, fetchedSecondsAgo: -30)).detail == "Updated just now")
+    }
+
+    // The owner's phone showed a door as Open in full green from a five-hour-old command while it was closed.
+    @Test func oldStateIsNeverShownAsCurrent() {
+        let old = card(snapshot(.open, fetchedSecondsAgo: 18_000))
+        #expect(old == DoorCard(
+            title: "Last known: Open", detail: "Last checked 5 hr ago. Pull down to check again.", tone: .neutral, icon: .clock, dashedBorder: true, tap: .none, hint: nil
+        ))
+        #expect(card(snapshot(.closed, fetchedSecondsAgo: 599)).tone == .closed)
+        #expect(card(snapshot(.closed, fetchedSecondsAgo: 600)).title == "Last known: Closed")
+    }
+
+    @Test func aFailedCheckMarksEvenRecentStateAsLastKnown() {
+        let unreachable = card(snapshot(.closed, fetchedSecondsAgo: 120, problem: .unreachable))
+        #expect(unreachable.title == "Last known: Closed")
+        #expect(unreachable.detail == "Couldn\u{2019}t reach myQ. Last checked 2 min ago.")
+        #expect(unreachable.tap == .none)
+        #expect(card(snapshot(.open, fetchedSecondsAgo: 30, problem: .rateLimited)).detail == "myQ is busy. Last checked just now.")
+    }
+
+    @Test func realProblemsStillWinOverAge() {
+        #expect(card(snapshot(.closed, fetchedSecondsAgo: 18_000, faults: ["F1"])).title == "Door has a fault")
+        #expect(card(snapshot(.closed, online: false, fetchedSecondsAgo: 18_000)).title == "Can't reach door")
     }
 
     @Test func neverCheckedIsANeutralDashedProblem() {

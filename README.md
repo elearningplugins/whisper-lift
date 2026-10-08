@@ -2,11 +2,11 @@
 
 A personal iPhone app ("Whisper Lift", internally `GarageTiles`) that opens and closes two myQ garage doors by Siri, with the iOS 26 CarPlay widgets page as a secondary goal. The design and phases are in [PLAN.md](PLAN.md).
 
-> **Safety:** this app can move real garage doors. Its Doors tab, `OpenDoorIntent` and `CloseDoorIntent` send live myQ commands once you sign in, including from Siri while the iPhone is locked. Test only with a person watching the door and the wall control in reach. The Spike tab is the only part that uses a mock counter.
+> **Safety:** this app can move real garage doors. Its door cards, `OpenDoorIntent` and `CloseDoorIntent` send live myQ commands once you sign in, including from Siri while the iPhone is locked. Test only with a person watching the door and the wall control in reach. The spike counter widget is the only part that uses a mock counter.
 
 ## Status
 
-- **Phase 0 (feasibility spike):** the counter spike is on the app's Spike tab. CI builds the app for iOS 26 and runs Simulator UI tests. On 2026-10-07 the app was signed with the free Personal Team (App Group and Keychain group accepted, check A3) and installed on an iPhone running iOS 26. See [docs/phase-0-spike.md](docs/phase-0-spike.md).
+- **Phase 0 (feasibility spike):** the counter spike lives on in the spike widget; its app tab was removed on 2026-10-07. CI builds the app for iOS 26 and runs Simulator UI tests. On 2026-10-07 the app was signed with the free Personal Team (App Group and Keychain group accepted, check A3) and installed on an iPhone running iOS 26. See [docs/phase-0-spike.md](docs/phase-0-spike.md).
 - **Phase 1 (gatectl security gate):** see the approval record in [docs/gatectl-security-review.md](docs/gatectl-security-review.md); the Mac session wrapper refuses to run unless it records an owner pass for the current `vendor/gatectl` tree.
 - **Phase 2 (Mac sessions):** the Mac session exists and one door has been cycled under supervision. The phone-seed session was imported into the iPhone app on 2026-10-07 and its Mac copy deleted. The app now also has its own "Sign in with myQ" flow, so new sessions no longer need a token paste; see [PLAN.md](PLAN.md#in-app-sign-in).
 - **Phases 4–8:** door, token and myQ logic in `GarageDoorKit`, wired into the app's Doors tab and the Siri intents. See [docs/garage-door-kit.md](docs/garage-door-kit.md).

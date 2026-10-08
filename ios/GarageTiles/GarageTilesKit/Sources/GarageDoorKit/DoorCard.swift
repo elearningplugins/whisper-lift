@@ -42,7 +42,7 @@ public struct DoorCard: Equatable, Sendable {
     }
 
     /** Problems come first, in safety order, so a card never shows an actionable color for a door the policy would refuse. */
-    public init(snapshot: DoorSnapshot?, now: Date, cooldown: TimeInterval = SafetyPolicy().cooldown) {
+    public init(snapshot: DoorSnapshot?, now: Date, cooldown: TimeInterval = SafetyPolicy().cooldown, staleAfter: TimeInterval = 600) {
         guard let snapshot else {
             self = .problem("Not checked yet", "The app hasn't heard from this door yet.", .neutral, .clock, dashed: true)
             return
@@ -66,6 +66,8 @@ public struct DoorCard: Equatable, Sendable {
             self = .problem("Vacation mode is on", "Turn it off in the myQ app to open this door. Closing still works.", .neutral, .locked, dashed: false)
         } else if device.unattendedOpenAllowed == false, device.unattendedCloseAllowed == false {
             self = .problem("Remote control is off", "This door doesn't allow control from an app.", .neutral, .locked, dashed: false)
+        } else if snapshot.problem == .unreachable || snapshot.problem == .rateLimited || now.timeIntervalSince(snapshot.fetchedAt) >= staleAfter {
+            self = Self.lastKnown(device.state, age: now.timeIntervalSince(snapshot.fetchedAt), failure: snapshot.problem)
         } else {
             self = Self.normal(device.state, updated: Self.updatedText(now.timeIntervalSince(snapshot.fetchedAt)), coolingDown: snapshot.lastCommandAt.map { now < $0.addingTimeInterval(cooldown) } ?? false)
         }
@@ -73,6 +75,24 @@ public struct DoorCard: Equatable, Sendable {
 
     private static func problem(_ title: String, _ detail: String, _ tone: Tone, _ icon: Icon, dashed: Bool) -> DoorCard {
         DoorCard(title: title, detail: detail, tone: tone, icon: icon, dashedBorder: dashed, tap: .none, hint: nil)
+    }
+
+    // An old or unconfirmed state is shown outlined and labelled "Last known", never in the filled color of a current state.
+    private static func lastKnown(_ state: DoorState, age: TimeInterval, failure: DoorProblem?) -> DoorCard {
+        let checked = "Last checked " + updatedText(age).dropFirst("Updated ".count) + "."
+        let detail = switch failure {
+        case .unreachable?: "Couldn\u{2019}t reach myQ. " + checked
+        case .rateLimited?: "myQ is busy. " + checked
+        default: checked + " Pull down to check again."
+        }
+        let label = switch state {
+        case .open: "Open"
+        case .closed: "Closed"
+        case .opening: "Opening\u{2026}"
+        case .closing: "Closing\u{2026}"
+        case .stopped, .unknown: "Unknown"
+        }
+        return problem(("Last known: " + label), detail, .neutral, .clock, dashed: true)
     }
 
     private static func normal(_ state: DoorState, updated: String, coolingDown: Bool) -> DoorCard {
