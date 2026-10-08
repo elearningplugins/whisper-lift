@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in the app, widget, Siri intents or scripts does not work as documented.
+description: Something in the app, Siri intents or scripts does not work as documented.
 labels: [bug]
 body:
   - type: markdown
@@ -23,7 +23,7 @@ body:
     id: versions
     attributes:
       label: Versions
-      description: Commit SHA, iOS version, Xcode version, and how you ran it (Doors tab, Siri, widget, script).
+      description: Commit SHA, iOS version, Xcode version, and how you ran it (door cards, Settings, Siri, script).
     validations:
       required: true
   - type: textarea

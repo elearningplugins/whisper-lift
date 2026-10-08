@@ -1,6 +1,5 @@
 import AppIntents
 import GarageDoorKit
-import WidgetKit
 
 /** Opens one door after a live myQ check; already open is success, and it never closes a door (PLAN.md Phase 7). */
 struct OpenDoorIntent: AppIntent {
@@ -60,12 +59,11 @@ enum DoorIntentRunner {
         let environment: GarageEnvironment
         do {
             // Siri answers as soon as myQ accepts the command, after one status read; the app screen confirms the movement.
-            environment = try GarageEnvironment.live(profile: .siri)
+            environment = try AppEnvironment.current(profile: .siri)
         } catch {
             throw DoorIntentError.notSetUp
         }
         let result = await environment.perform(request, on: identity)
-        WidgetCenter.shared.reloadAllTimelines()
         return .result(dialog: "\(result.dialog)")
     }
 }

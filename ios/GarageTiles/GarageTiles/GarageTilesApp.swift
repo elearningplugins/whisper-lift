@@ -9,7 +9,7 @@ struct GarageTilesApp: App {
 
     var body: some Scene {
         WindowGroup {
-            // One screen: the doors, with Settings behind the moon. The Phase 0 Spike tab is gone; its widget remains for the widget checks.
+            // One screen: the doors, with Settings behind the moon.
             DoorsView()
                 .preferredColorScheme(.dark)
                 .tint(Theme.amber)

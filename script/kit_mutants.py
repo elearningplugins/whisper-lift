@@ -31,6 +31,7 @@ MUTANTS = [
     ("GarageEnvironment.swift", "await mark(doors, .unreachable)", "await mark(doors, .rateLimited)", "StatusRefreshTests", "failure marked as the wrong problem"),
     ("GarageEnvironment.swift", "                try trafficLog.remove()\n", "", "GarageEnvironmentSignOutTests", "sign-out leaves the request log"),
     ("TokenCoordinator.swift", "try await lock.withLock(timeout: lockTimeout) {\n            do {\n                try removable.remove()", "try await ImmediateNoLock().run {\n            do {\n                try removable.remove()", "SignOutTests", "sign-out skips the refresh lock"),
+    ("Sandbox.swift", "sandboxed ? sharedSandbox : try live()", "try live()", "SandboxSelectionTests", "a sandboxed run reaches the live environment"),
     ("CheckThrottle.swift", "if !force, let lastCheck,", "if let lastCheck,", "CheckThrottleTests", "pull to refresh can be skipped"),
     ("CheckThrottle.swift", "        lastCheck = now\n", "", "CheckThrottleTests", "duplicate launch check not skipped"),
     ("Traffic.swift", "request.status.map { !(200..<300).contains($0) } ?? true", "request.status.map { (200..<300).contains($0) } ?? true", "TrafficExportTests", "failed-request count inverted"),
