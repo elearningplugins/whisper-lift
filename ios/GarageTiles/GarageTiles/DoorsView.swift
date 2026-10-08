@@ -29,6 +29,10 @@ final class DoorsModel {
     var findResult: String?
     var flashes: [DoorIdentity: String] = [:]
     var checkingStatus = false
+    // Doors tapped a moment ago and still waiting for myQ to accept; their cards show Opening or Closing right away.
+    var pending: [DoorIdentity: DoorAction] = [:]
+    private var followUps: [DoorIdentity: Task<Void, Never>] = [:]
+    private var throttle = CheckThrottle()
     private var flashTasks: [DoorIdentity: Task<Void, Never>] = [:]
     let setupProblem: String?
     private let environment: GarageEnvironment?
@@ -111,8 +115,8 @@ final class DoorsModel {
     }
 
     /** Reads every door's live state from myQ, so the cards never show an old state as current; one request per account and never a command. */
-    func refreshStatus() async {
-        guard let environment, session == .signedIn, !catalog.doors.isEmpty, !checkingStatus else { return }
+    func refreshStatus(force: Bool = false) async {
+        guard let environment, session == .signedIn, !catalog.doors.isEmpty, !checkingStatus, throttle.allow(at: Date(), force: force) else { return }
         checkingStatus = true
         defer { checkingStatus = false }
         let result = await environment.refreshStatus()
@@ -142,18 +146,37 @@ final class DoorsModel {
         }
         announce(findResult)
         reload()
-        await refreshStatus()
+        await refreshStatus(force: true)
     }
 
+    /** Flips the card at once, sends one command, then watches the door in the background; nothing else on the screen waits or dims. */
     func perform(_ request: DoorRequest, on door: CatalogDoor) async {
-        guard let environment else { return }
-        busy = true
-        defer { busy = false }
+        guard let environment, pending[door.identity] == nil else { return }
+        let action: DoorAction = request == .close ? .close : .open
+        pending[door.identity] = action
         let result = await environment.perform(request, on: door.identity)
+        // The card reverts to myQ's answer here, so a refused or failed command never stays shown as moving.
+        pending[door.identity] = nil
+        reload()
         flash(result.outcome.cardMessage(doorName: door.name), on: door)
         announce(result.dialog)
         WidgetCenter.shared.reloadAllTimelines()
-        reload()
+        if case .accepted = result.outcome { watch(action, on: door, using: environment) }
+    }
+
+    private func watch(_ action: DoorAction, on door: CatalogDoor, using environment: GarageEnvironment) {
+        followUps[door.identity]?.cancel()
+        followUps[door.identity] = Task { [weak self] in
+            await environment.followUp(after: action, on: door.identity, onCheck: { [weak self] in await self?.reload() })
+            WidgetCenter.shared.reloadAllTimelines()
+            self?.followUps[door.identity] = nil
+        }
+    }
+
+    /** The card to draw: the instant "sending" card while a tap waits for myQ, otherwise the saved state. */
+    func card(for door: CatalogDoor, at date: Date) -> DoorCard {
+        if let action = pending[door.identity] { return DoorCard.sending(action) }
+        return DoorCard(snapshot: snapshots[door.identity], now: date)
     }
 
     /** Runs what a tap on a door card means: one explicit command, or a short explanation with no request at all. */
@@ -253,8 +276,8 @@ struct DoorsView: View {
                     // Ages like "Updated 2 min ago" and the switch to "Last known" happen on their own while the screen is open.
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         DoorCardView(
-                            door: door, card: DoorCard(snapshot: model.snapshots[door.identity], now: context.date), flash: model.flashes[door.identity],
-                            enabled: model.session == .signedIn && !model.busy,
+                            door: door, card: model.card(for: door, at: context.date), flash: model.flashes[door.identity],
+                            enabled: model.session == .signedIn && !model.busy && model.pending[door.identity] == nil,
                             tap: { card in model.tap(card, on: door) },
                             command: { request in Task { await model.perform(request, on: door) } }
                         )
@@ -266,7 +289,7 @@ struct DoorsView: View {
         }
         .background(Theme.background.ignoresSafeArea())
         .foregroundStyle(Theme.text)
-        .refreshable { await model.refreshStatus() }
+        .refreshable { await model.refreshStatus(force: true) }
         .task { await model.refreshStatus() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.refreshStatus() } }
@@ -539,7 +562,6 @@ struct DoorCardView: View {
         .frame(maxWidth: .infinity, minHeight: 190)
         .padding(20)
         .background(DoorCardStyle.fill(card.tone), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .opacity(enabled ? 1 : 0.6)
     }
 
     private var problemCard: some View {

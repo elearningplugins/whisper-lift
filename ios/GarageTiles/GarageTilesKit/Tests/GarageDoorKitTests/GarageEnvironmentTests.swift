@@ -292,3 +292,86 @@ private func signedIn(_ keychain: FakeKeychain) throws {
         #expect(try env.snapshotStore.snapshot(for: big.identity)?.device.state == .closed)
     }
 }
+
+@Suite struct FollowUpTests {
+    private let small = CatalogDoor(identity: DoorIdentity(accountID: "account-1", serial: "door-1"), accountName: "Demo Home", name: "Single Car Garage")
+
+    private func smallDoorJSON(_ state: String) -> Result<HTTPResponse, MyQError> {
+        .success(HTTPResponse(status: 200, headers: [:], body: Data("""
+        {"items":[{"serial_number":"door-1","name":"Single Car Garage","device_family":"garagedoor","state":{"door_state":"\(state)","online":true,"is_unattended_open_allowed":true,"is_unattended_close_allowed":true}}]}
+        """.utf8)))
+    }
+
+    private func signedInEnvironment(_ transport: FakeTransport) throws -> GarageEnvironment {
+        let keychain = FakeKeychain()
+        try signedIn(keychain)
+        let env = environment(tempDirectory(), keychain: keychain, transport: transport)
+        try env.catalogStore.write(DoorCatalog(doors: [small]))
+        return env
+    }
+
+    // The owner's door takes 12 to 15 seconds to close; three reads 3 seconds apart left the card on "Closing..." until the app was reopened.
+    @Test func checksUntilTheDoorFinishesThenStops() async throws {
+        let transport = FakeTransport([smallDoorJSON("closing"), smallDoorJSON("closing"), smallDoorJSON("closed"), smallDoorJSON("closed")])
+        let env = try signedInEnvironment(transport)
+        let slept = SleepRecorder()
+        let updates = UpdateCounter()
+        await env.followUp(after: .close, on: small.identity, interval: .seconds(5), maximumChecks: 8, sleep: { await slept.record($0) }, onCheck: { await updates.bump() })
+        #expect(transport.requests.map(\.method) == ["GET", "GET", "GET"], "stops at the first closed reading and never sends a command")
+        #expect(await slept.durations == [.seconds(5), .seconds(5), .seconds(5)])
+        #expect(await updates.count == 3, "the screen refreshes after every check")
+        #expect(try env.snapshotStore.snapshot(for: small.identity)?.device.state == .closed)
+    }
+
+    @Test func givesUpAfterTheMaximumWhileStillMoving() async throws {
+        let transport = FakeTransport(Array(repeating: smallDoorJSON("closing"), count: 10))
+        let env = try signedInEnvironment(transport)
+        await env.followUp(after: .close, on: small.identity, interval: .seconds(5), maximumChecks: 4, sleep: { _ in }, onCheck: {})
+        #expect(transport.requests.count == 4)
+    }
+
+    @Test func stopsWhenTheDoorEndsSomewhereElse() async throws {
+        let transport = FakeTransport([smallDoorJSON("closing"), smallDoorJSON("open"), smallDoorJSON("open")])
+        let env = try signedInEnvironment(transport)
+        await env.followUp(after: .close, on: small.identity, interval: .seconds(5), maximumChecks: 8, sleep: { _ in }, onCheck: {})
+        #expect(transport.requests.count == 2, "a door that reversed, for example after the safety sensor saw something, is reported as it is")
+        #expect(try env.snapshotStore.snapshot(for: small.identity)?.device.state == .open)
+    }
+
+    @Test func stopsWhenTheSessionIsGone() async throws {
+        let transport = FakeTransport([])
+        let env = environment(tempDirectory(), keychain: FakeKeychain(), transport: transport)
+        try env.catalogStore.write(DoorCatalog(doors: [small]))
+        let slept = SleepRecorder()
+        await env.followUp(after: .open, on: small.identity, interval: .seconds(5), maximumChecks: 8, sleep: { await slept.record($0) }, onCheck: {})
+        #expect(transport.requests.isEmpty)
+        #expect(await slept.durations.count == 1, "it stops after the first check instead of waiting out all eight")
+    }
+}
+
+actor SleepRecorder {
+    private(set) var durations: [Duration] = []
+    func record(_ duration: Duration) { durations.append(duration) }
+}
+
+actor UpdateCounter {
+    private(set) var count = 0
+    func bump() { count += 1 }
+}
+
+@Suite struct CheckThrottleTests {
+    @Test func aSecondCheckWithinTheIntervalIsSkippedUnlessForced() {
+        var throttle = CheckThrottle(minimumInterval: 5)
+        let start = Date(timeIntervalSince1970: 1_790_000_000)
+        let first = throttle.allow(at: start)
+        let duplicate = throttle.allow(at: start.addingTimeInterval(0.3))
+        let pulled = throttle.allow(at: start.addingTimeInterval(0.5), force: true)
+        let tooSoon = throttle.allow(at: start.addingTimeInterval(4))
+        let later = throttle.allow(at: start.addingTimeInterval(5.6))
+        #expect(first)
+        #expect(!duplicate, "opening the app fires both appear and become-active; only one check runs")
+        #expect(pulled, "pull to refresh always checks")
+        #expect(!tooSoon, "the forced check counts as the latest one")
+        #expect(later)
+    }
+}

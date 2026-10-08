@@ -155,7 +155,7 @@ public struct MeteredTransport: HTTPTransport {
     }
 }
 
-/** How much confirmation a command waits for: Siri answers once myQ accepts it, the app screen also watches the door move. */
+/** How much confirmation a command waits for: both return once myQ accepts, and the app screen confirms the movement afterwards with GarageEnvironment.followUp. */
 public enum CommandProfile: Sendable {
     case siri
     case interactive
@@ -163,7 +163,7 @@ public enum CommandProfile: Sendable {
     public var followUpReads: Int {
         switch self {
         case .siri: 0
-        case .interactive: 3
+        case .interactive: 0
         }
     }
 }
