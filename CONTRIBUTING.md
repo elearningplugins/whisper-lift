@@ -26,7 +26,7 @@ Every check runs offline. None of them signs anything, contacts myQ, or moves a 
 | `script/check-gitleaks-rule <gitleaks>` | Proves the App Check debug-token scan rule still catches fake tokens; CI runs it before every secret scan |
 | `python3 script/kit_mutants.py` | Mutation check of the app's status, card, sign-out, export and sign-in logic; every mutant must be killed |
 
-CI runs all of these on every pull request.
+CI runs all of these on every pull request, plus CodeQL code scanning of the Python tools and the Swift app.
 
 ## Pull requests
 
