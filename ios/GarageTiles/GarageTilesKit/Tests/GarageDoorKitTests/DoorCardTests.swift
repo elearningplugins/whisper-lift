@@ -76,6 +76,22 @@ private func card(_ snapshot: DoorSnapshot?) -> DoorCard { DoorCard(snapshot: sn
         #expect(card(snapshot(.open, fetchedSecondsAgo: 30, problem: .rateLimited)).detail == "myQ is busy. Last checked just now.")
     }
 
+    @Test func aTappedCardFlipsAtOnceWhileMyQIsAsked() {
+        #expect(DoorCard.sending(.close) == DoorCard(
+            title: "Closing\u{2026}", detail: "Sending to myQ\u{2026}", tone: .moving, icon: .closing, dashedBorder: false, tap: .explain(DoorCard.alreadyMoving), hint: "Moving"
+        ))
+        #expect(DoorCard.sending(.open).title == "Opening\u{2026}")
+        #expect(DoorCard.sending(.open).icon == .opening)
+    }
+
+    @Test func aDoorShownMovingForMoreThan45SecondsBecomesLastKnown() {
+        #expect(card(snapshot(.closing, fetchedSecondsAgo: 44)).tone == .moving)
+        let stuck = card(snapshot(.closing, fetchedSecondsAgo: 45))
+        #expect(stuck.title == "Last known: Closing\u{2026}")
+        #expect(stuck.detail == "Last checked just now. Pull down to check again.")
+        #expect(stuck.tap == .none)
+    }
+
     @Test func realProblemsStillWinOverAge() {
         #expect(card(snapshot(.closed, fetchedSecondsAgo: 18_000, faults: ["F1"])).title == "Door has a fault")
         #expect(card(snapshot(.closed, online: false, fetchedSecondsAgo: 18_000)).title == "Can't reach door")
@@ -123,7 +139,7 @@ private func card(_ snapshot: DoorSnapshot?) -> DoorCard { DoorCard(snapshot: sn
 
     @Test func normalCardsAreNotProblems() {
         #expect(!card(snapshot(.closed)).isProblem)
-        #expect(!card(snapshot(.opening)).isProblem)
+        #expect(!card(snapshot(.opening, fetchedSecondsAgo: 5)).isProblem)
     }
 }
 

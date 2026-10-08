@@ -182,6 +182,23 @@ public struct GarageEnvironment: Sendable {
         return result
     }
 
+    /** After myQ accepts a command, checks the door every interval until it stops moving or the limit is reached; reads only, never a command, and the caller redraws after each check. */
+    public func followUp(
+        after action: DoorAction, on door: DoorIdentity, interval: Duration = .seconds(5), maximumChecks: Int = 8,
+        sleep: @escaping @Sendable (Duration) async -> Void = { try? await Task.sleep(for: $0) }, onCheck: @escaping @Sendable () async -> Void = {}
+    ) async {
+        for _ in 0..<maximumChecks {
+            await sleep(interval)
+            if Task.isCancelled { return }
+            let result = await refreshStatus()
+            await onCheck()
+            if result == .signInRequired || result == .noDoors { return }
+            guard let state = (try? snapshotStore.snapshot(for: door))??.device.state else { continue }
+            // Any state other than moving ends the watch, including a door that reversed instead of reaching the action's target.
+            if state != .opening && state != .closing { return }
+        }
+    }
+
     private func mark(_ doors: [CatalogDoor], _ problem: DoorProblem) async {
         for door in doors {
             await whileDoorIsIdle(door) { cached in cached?.marking(problem) }

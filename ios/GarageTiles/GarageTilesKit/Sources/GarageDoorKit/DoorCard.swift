@@ -42,7 +42,7 @@ public struct DoorCard: Equatable, Sendable {
     }
 
     /** Problems come first, in safety order, so a card never shows an actionable color for a door the policy would refuse. */
-    public init(snapshot: DoorSnapshot?, now: Date, cooldown: TimeInterval = SafetyPolicy().cooldown, staleAfter: TimeInterval = 600) {
+    public init(snapshot: DoorSnapshot?, now: Date, cooldown: TimeInterval = SafetyPolicy().cooldown, staleAfter: TimeInterval = 600, movingStaleAfter: TimeInterval = 45) {
         guard let snapshot else {
             self = .problem("Not checked yet", "The app hasn't heard from this door yet.", .neutral, .clock, dashed: true)
             return
@@ -66,11 +66,20 @@ public struct DoorCard: Equatable, Sendable {
             self = .problem("Vacation mode is on", "Turn it off in the myQ app to open this door. Closing still works.", .neutral, .locked, dashed: false)
         } else if device.unattendedOpenAllowed == false, device.unattendedCloseAllowed == false {
             self = .problem("Remote control is off", "This door doesn't allow control from an app.", .neutral, .locked, dashed: false)
-        } else if snapshot.problem == .unreachable || snapshot.problem == .rateLimited || now.timeIntervalSince(snapshot.fetchedAt) >= staleAfter {
+        } else if snapshot.problem == .unreachable || snapshot.problem == .rateLimited || now.timeIntervalSince(snapshot.fetchedAt) >= staleAfter
+            || ([.opening, .closing].contains(device.state) && now.timeIntervalSince(snapshot.fetchedAt) >= movingStaleAfter) {
             self = Self.lastKnown(device.state, age: now.timeIntervalSince(snapshot.fetchedAt), failure: snapshot.problem)
         } else {
             self = Self.normal(device.state, updated: Self.updatedText(now.timeIntervalSince(snapshot.fetchedAt)), coolingDown: snapshot.lastCommandAt.map { now < $0.addingTimeInterval(cooldown) } ?? false)
         }
+    }
+
+    /** The card the moment it's tapped, before myQ answers; the app reverts it if myQ refuses or can't be reached. */
+    public static func sending(_ action: DoorAction) -> DoorCard {
+        DoorCard(
+            title: action == .open ? "Opening\u{2026}" : "Closing\u{2026}", detail: "Sending to myQ\u{2026}", tone: .moving, icon: action == .open ? .opening : .closing,
+            dashedBorder: false, tap: .explain(alreadyMoving), hint: "Moving"
+        )
     }
 
     private static func problem(_ title: String, _ detail: String, _ tone: Tone, _ icon: Icon, dashed: Bool) -> DoorCard {

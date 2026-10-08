@@ -129,17 +129,18 @@ private func tempDirectory() -> URL {
         #expect(result.dialog == "Two Car Garage is opening.")
     }
 
-    @Test func appScreenConfirmsWithFollowUpReads() async throws {
-        let transport = FakeTransport([devices("closed"), .success(HTTPResponse(status: 202, headers: [:], body: Data())), devices("opening"), devices("open")])
+    // The app screen now returns as soon as myQ accepts, so a tap never blocks the screen; GarageEnvironment.followUp confirms the movement afterwards.
+    @Test func appScreenReturnsAsSoonAsMyQAccepts() async throws {
+        let transport = FakeTransport([devices("closed"), .success(HTTPResponse(status: 202, headers: [:], body: Data()))])
         let env = try environment(transport, profile: .interactive)
         let result = await env.perform(.open, on: big.identity)
-        #expect(transport.requests.map(\.method) == ["GET", "PUT", "GET", "GET"])
-        #expect(result.dialog == "Two Car Garage is open.")
+        #expect(transport.requests.map(\.method) == ["GET", "PUT"])
+        #expect(result.dialog == "Two Car Garage is opening.")
     }
 
     @Test func profilesHaveTheDocumentedReadCounts() {
         #expect(CommandProfile.siri.followUpReads == 0)
-        #expect(CommandProfile.interactive.followUpReads == 3)
+        #expect(CommandProfile.interactive.followUpReads == 0)
     }
 
     @Test func everyRequestIsMetered() async throws {
