@@ -1,0 +1,54 @@
+# Code scanning with CodeQL for the Python tools (gatectl and scripts) and the Swift app; results appear in the Security tab once the repository is public.
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "41 7 * * 2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            os: ubuntu-latest
+            build-mode: none
+          - language: swift
+            os: macos-15
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      # Swift needs a real compile for CodeQL to observe; it is unsigned and uses the repository's placeholder bundle prefix, like CI.
+      - name: Build the app for CodeQL
+        if: matrix.build-mode == 'manual'
+        run: |
+          sudo xcode-select -s "$(find /Applications -maxdepth 1 -name 'Xcode_26*.app' | sort -V | tail -1)"
+          brew install xcodegen
+          cd ios/GarageTiles
+          xcodegen generate
+          xcodebuild -project GarageTiles.xcodeproj -scheme GarageTiles -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: "/language:${{ matrix.language }}"
