@@ -46,3 +46,5 @@ jobs:
             ${{ runner.temp }}/ci/*.png
             ${{ runner.temp }}/ci/UITests.xcresult
           if-no-files-found: ignore
+          # The UI tests run in the signed-out sandbox, so these hold only simulator data; they still expire after a week.
+          retention-days: 7

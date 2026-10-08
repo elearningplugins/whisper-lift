@@ -1,4 +1,4 @@
-# Public-release gate: scans every branch and tag plus the working tree, including for App Check debug tokens; it stays red until history is clean.
+# Defense in depth behind the per-PR scan: scans every branch and tag plus the working tree with the App Check debug-token rule.
 name: Release scan
 
 on:
@@ -21,6 +21,8 @@ jobs:
         run: git fetch --no-tags --prune origin '+refs/heads/*:refs/remotes/origin/*' && git fetch --tags origin
       - name: Install gitleaks
         run: script/install-gitleaks "$RUNNER_TEMP"
+      - name: Prove the debug-token rule still catches fake tokens
+        run: script/check-gitleaks-rule "$RUNNER_TEMP/gitleaks"
       - name: Scan all refs
         run: '"$RUNNER_TEMP/gitleaks" git --no-banner --redact --config .github/gitleaks-release.toml --log-opts="--all" .'
       - name: Scan the working tree
