@@ -8,7 +8,7 @@ Read this file first. Then read [PLAN.md](PLAN.md) and [docs/gatectl-security-re
 | --- | --- |
 | Phase 0: CarPlay and free-signing spike | **Partly verified on a device.** Automated tests pass (`script/test`), and CI builds for iOS 26 and runs Simulator UI tests. On 2026-10-07 the app was signed with the free Personal Team and installed on an iPhone (A1 to A3 pass, A4 partial). The widget, locked-phone and CarPlay checks are still to be observed by the owner. See [docs/phase-0-spike.md](docs/phase-0-spike.md). |
 | Phase 1: gatectl security gate | **Passed 2026-10-07** for `vendor/gatectl` tree `c1e39969…`, which moves the App Check debug token out of the source (GQ-07). Earlier passes for `e200f354…` and `e0eba7c2…` are superseded. Any change under `vendor/gatectl`, or any re-review trigger, reopens the gate. |
-| Phases 2–9 | The testable core for Phases 4–8 is in `GarageDoorKit` (see [docs/garage-door-kit.md](docs/garage-door-kit.md)). **The app uses it:** the Doors tab and the Siri intents send real myQ door commands. Every phase that uses myQ credentials or moves a door is still blocked until Phase 1 records an explicit pass. |
+| Phases 2–9 | The testable core for Phases 4–8 is in `GarageDoorKit` (see [docs/garage-door-kit.md](docs/garage-door-kit.md)). **The app uses it:** the door cards and the Siri intents send real myQ door commands. Every phase that uses myQ credentials or moves a door is still blocked until Phase 1 records an explicit pass. |
 
 ## What to do next
 
@@ -39,7 +39,7 @@ Follow "Phase 1: gatectl security gate" in PLAN.md and the "Required approval ch
 - Never run `vendor/gatectl` against the network, never run its `script/install`, and never use `--yes`. Auditing and running tests with fakes is allowed.
 - Never claim a locked-phone, CarPlay, Siri or vehicle check passed unless the owner physically observed it. Update PLAN.md only for checks that were genuinely completed.
 - Never commit secrets, signing identities, team IDs, provisioning profiles, `Signing.local.xcconfig`, the generated `GarageTiles.xcodeproj`, `DerivedData`, or `xcuserdata`. `.gitignore` covers these, so check `git status` before committing anyway.
-- Decision, 2026-10-06: the owner chose Siri as the primary in-car control, so myQ code now lives in the app (the Doors tab, `OpenDoorIntent`, `CloseDoorIntent`). The counter spike stays on its own tab for the widget and App Group checks, and its counter is still its only side effect.
+- Decision, 2026-10-06: the owner chose Siri as the primary in-car control, so myQ code now lives in the app (the door cards, `OpenDoorIntent`, `CloseDoorIntent`). The counter spike stays on its own tab for the widget and App Group checks, and its counter is still its only side effect.
 
 ## Working in this repository
 

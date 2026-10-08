@@ -39,14 +39,12 @@ xcodebuild test -project GarageTiles.xcodeproj -scheme GarageTiles -configuratio
     CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= | tee "$out/test-sim.log" | grep -E '(error|warning):|Test Case|TEST (SUCCEEDED|FAILED)|Executed' || true
 grep -q 'TEST SUCCEEDED' "$out/test-sim.log"
 
-app="$(find "$out/DerivedData-sim/Build/Products" -maxdepth 2 -name GarageTiles.app -type d | head -1)"
-plutil -p "$app/PlugIns/GarageTilesWidget.appex/Info.plist" | grep -E 'NSExtensionPointIdentifier|CFBundleShortVersionString'
 # Simulator builds keep entitlements in the processed .xcent files rather than in a code signature that codesign can print.
 find "$out/DerivedData-sim/Build/Intermediates.noindex" -name '*.xcent' | sort | while read -r xcent; do
     echo "$xcent"
     plutil -p "$xcent"
 done | tee "$out/entitlements.txt"
-for target in GarageTiles.app GarageTilesWidget.appex; do
+for target in GarageTiles.app; do
     xcent="$(find "$out/DerivedData-sim/Build/Intermediates.noindex" -name "$target-Simulated.xcent" | head -1)"
     if [ -z "$xcent" ] || ! plutil -p "$xcent" | grep -q '"group.com.example.change-me.GarageTiles"'; then
         echo "$target is missing the App Group entitlement" >&2

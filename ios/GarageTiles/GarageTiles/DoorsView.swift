@@ -4,9 +4,8 @@ import SwiftUI
 #if canImport(UIKit)
 import UIKit
 #endif
-import WidgetKit
 
-/** State for the Doors tab: the myQ session, the door catalog, cached snapshots and app-screen commands. */
+/** State for the doors screen: the myQ session, the door catalog, cached snapshots and app-screen commands. */
 @MainActor
 @Observable
 final class DoorsModel {
@@ -39,13 +38,20 @@ final class DoorsModel {
 
     init() {
         do {
-            environment = try GarageEnvironment.live()
+            environment = try Self.makeEnvironment()
             setupProblem = nil
         } catch {
             environment = nil
             setupProblem = "This build is missing its App Group or Keychain group (\(error)). Rebuild with Signing.local.xcconfig set."
         }
         reload()
+    }
+
+    private static func makeEnvironment() throws -> GarageEnvironment {
+        #if DEBUG
+        if UITestSandbox.isActive { return UITestSandbox.environment() }
+        #endif
+        return try GarageEnvironment.live()
     }
 
     func reload() {
@@ -121,7 +127,6 @@ final class DoorsModel {
         defer { checkingStatus = false }
         let result = await environment.refreshStatus()
         if result == .signInRequired { announce(CommandOutcome.signInRequired.dialog(doorName: "")) }
-        WidgetCenter.shared.reloadAllTimelines()
         reload()
     }
 
@@ -160,7 +165,6 @@ final class DoorsModel {
         reload()
         flash(result.outcome.cardMessage(doorName: door.name), on: door)
         announce(result.dialog)
-        WidgetCenter.shared.reloadAllTimelines()
         if case .accepted = result.outcome { watch(action, on: door, using: environment) }
     }
 
@@ -168,7 +172,6 @@ final class DoorsModel {
         followUps[door.identity]?.cancel()
         followUps[door.identity] = Task { [weak self] in
             await environment.followUp(after: action, on: door.identity, onCheck: { [weak self] in await self?.reload() })
-            WidgetCenter.shared.reloadAllTimelines()
             self?.followUps[door.identity] = nil
         }
     }
@@ -223,7 +226,6 @@ final class DoorsModel {
             message = GarageEnvironment.SignOutError.localDataNotRemoved.description
         }
         GarageTilesShortcuts.updateAppShortcutParameters()
-        WidgetCenter.shared.reloadAllTimelines()
         reload()
     }
 

@@ -6,7 +6,8 @@ final class AccessibilityUITests: XCTestCase {
     private func launch(arguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
-        app.launchArguments += arguments
+        // Starts signed out on throwaway storage that can't reach myQ, so the tests never touch a real session or door.
+        app.launchArguments += arguments + ["-WhisperLiftUITestSandbox"]
         app.launch()
         // Let the first layout settle so the audit never measures colors mid-animation.
         Thread.sleep(forTimeInterval: 2)

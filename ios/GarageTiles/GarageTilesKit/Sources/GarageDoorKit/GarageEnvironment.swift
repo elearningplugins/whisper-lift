@@ -79,7 +79,7 @@ public struct GarageEnvironment: Sendable {
             throw SetupError.missingKeychainGroup
         }
         guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else { throw SetupError.containerUnavailable }
-        // Only sign-in needs the configuration, so Siri, the widget and door commands keep working without it.
+        // Only sign-in needs the configuration, so Siri and door commands keep working without it.
         let configuration = try? MyQConfiguration(info: bundle.infoDictionary ?? [:])
         return GarageEnvironment(
             dataDirectory: container.appendingPathComponent("Doors", isDirectory: true), keychainGroup: keychainGroup, configuration: configuration, profile: profile

@@ -1,6 +1,5 @@
 import AppIntents
 import GarageDoorKit
-import WidgetKit
 
 /** Opens one door after a live myQ check; already open is success, and it never closes a door (PLAN.md Phase 7). */
 struct OpenDoorIntent: AppIntent {
@@ -65,7 +64,6 @@ enum DoorIntentRunner {
             throw DoorIntentError.notSetUp
         }
         let result = await environment.perform(request, on: identity)
-        WidgetCenter.shared.reloadAllTimelines()
         return .result(dialog: "\(result.dialog)")
     }
 }

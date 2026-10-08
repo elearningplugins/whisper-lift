@@ -1,6 +1,6 @@
 import Foundation
 
-/** How the Doors tab draws one door, following the app design: a color, an icon and words for every state, and what a tap on the card does. */
+/** How the doors screen draws one door, following the app design: a color, an icon and words for every state, and what a tap on the card does. */
 public struct DoorCard: Equatable, Sendable {
     /** The card's color family: red closed, green open, purple moving, amber warning outline, gray neutral outline. */
     public enum Tone: String, Sendable {

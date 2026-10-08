@@ -1,6 +1,6 @@
 # GarageDoorKit: door, token and myQ client logic
 
-`ios/GarageTiles/GarageTilesKit/Sources/GarageDoorKit` holds the testable core for PLAN.md Phases 4 to 8. **The app links it:** the Doors tab, `OpenDoorIntent` and `CloseDoorIntent` use it to send real myQ commands once the owner signs in. The counter widget does not use it yet.
+`ios/GarageTiles/GarageTilesKit/Sources/GarageDoorKit` holds the testable core for PLAN.md Phases 4 to 8. **The app links it:** the door cards, `OpenDoorIntent` and `CloseDoorIntent` use it to send real myQ commands once the owner signs in. The counter widget does not use it yet.
 
 Nothing here has contacted myQ. Every test uses fakes or an in-process `URLProtocol` stub.
 
