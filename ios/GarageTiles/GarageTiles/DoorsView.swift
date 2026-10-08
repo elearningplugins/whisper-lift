@@ -38,20 +38,13 @@ final class DoorsModel {
 
     init() {
         do {
-            environment = try Self.makeEnvironment()
+            environment = try AppEnvironment.current()
             setupProblem = nil
         } catch {
             environment = nil
             setupProblem = "This build is missing its App Group or Keychain group (\(error)). Rebuild with Signing.local.xcconfig set."
         }
         reload()
-    }
-
-    private static func makeEnvironment() throws -> GarageEnvironment {
-        #if DEBUG
-        if UITestSandbox.isActive { return UITestSandbox.environment() }
-        #endif
-        return try GarageEnvironment.live()
     }
 
     func reload() {

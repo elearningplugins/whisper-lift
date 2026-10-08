@@ -1,6 +1,6 @@
 # GarageDoorKit: door, token and myQ client logic
 
-`ios/GarageTiles/GarageTilesKit/Sources/GarageDoorKit` holds the testable core for PLAN.md Phases 4 to 8. **The app links it:** the door cards, `OpenDoorIntent` and `CloseDoorIntent` use it to send real myQ commands once the owner signs in. The counter widget does not use it yet.
+`ios/GarageTiles/GarageTilesKit/Sources/GarageDoorKit` holds the testable core for PLAN.md Phases 4 to 8. **The app links it:** the door cards, `OpenDoorIntent` and `CloseDoorIntent` use it to send real myQ commands once the owner signs in. The app has no widget.
 
 Nothing here has contacted myQ. Every test uses fakes or an in-process `URLProtocol` stub.
 
@@ -25,6 +25,7 @@ Nothing here has contacted myQ. Every test uses fakes or an in-process `URLProto
 | `MyQSignIn.swift` | Phase 6 in-app sign-in | PKCE (RFC 7636 S256), the authorization URL, strict `com.myqops://android` callback parsing with a state check, App Check, the code exchange, and saving the session as the next token generation under the refresh lock; nothing is saved on cancel or any failure | `PKCETests`, `CallbackParsingTests`, `SignInFlowTests`, `GarageEnvironmentSignInTests` |
 | `GarageEnvironment.swift` | Phases 6 to 8 | Builds every service from the bundle's App Group and Keychain group and runs a request against a catalog door | `GarageEnvironmentTests` with a fake keychain and fake myQ |
 | `DoorCard.swift`, `CheckThrottle.swift` | App design | Maps saved state to the design's cards; state 10 or more minutes old, a failed check, or "moving" for 45 seconds shows as an outlined "Last known" card; a tapped card shows Opening or Closing at once. `GarageEnvironment.refreshStatus` and `followUp` read live state (never a command) on open and every 5 seconds after a command until the door stops; `CheckThrottle` keeps launch to one check | `DoorCardTests`, `StatusRefreshTests`, `FollowUpTests`, `CheckThrottleTests`; `script/kit_mutants.py` |
+| `Sandbox.swift` | UI tests | `GarageEnvironment.select` is the one switch between the live environment and a sandbox (signed out, throwaway storage, in-memory Keychain, a transport that refuses every request); the app's `Shared/AppEnvironment.swift` is the only caller, so the doors screen, Siri's door lookup and the intents all honor `-WhisperLiftUITestSandbox` in Debug builds | `SandboxSelectionTests`, and `LiveEnvironmentBoundaryTests`, which fails if any app source builds an environment another way |
 | `Traffic.swift` | Diagnostics | `MeteredTransport` logs each myQ request (time, method, host, endpoint template, status, estimated sizes) to the last 500 entries in the App Group; `TrafficExport` turns the log into the shareable JSON file behind **Export request log (JSON)** | `MeteredTransportTests`, `TrafficExportTests`, including a property test that no account ID or serial reaches the export |
 | `DoorCommandService.swift` | Phase 8 tap sequence, Phase 7 dialogs | Live read, policy, at most one PUT, optimistic snapshot, bounded follow-up reads, one re-read after an unknown outcome; spoken dialog for every outcome | `DoorCommandServiceTests` including double tap and a property of at most one command per tap |
 
@@ -53,7 +54,7 @@ Second run, 2026-10-07, over the newer `DoorCatalog.swift`, `SessionImporter.swi
 ## Not done yet, and why
 
 - **Keychain on a device.** `KeychainTokenStore` and its query attributes are tested through a fake backend; the real `SecItem` calls need a signed app with the Keychain access group.
-- **Door widget.** The intents and `DoorEntity` are in `Shared/`, ready for a door widget once the widget check on the iPhone passes; Siri is the primary control.
+- **Door widget.** Not built. The intents and `DoorEntity` in `Shared/` could back a future door widget; the Phase 0 widget check was never run and the spike widget is removed. Siri is the primary control.
 - **Live myQ behavior.** Response shapes follow gatectl and the community references; the first real responses come in Phase 2 under supervision.
 
 ## Running

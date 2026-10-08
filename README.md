@@ -1,8 +1,8 @@
 # Whisper Lift
 
-A personal iPhone app ("Whisper Lift", internally `GarageTiles`) that opens and closes two myQ garage doors by Siri, with the iOS 26 CarPlay widgets page as a secondary goal. The design and phases are in [PLAN.md](PLAN.md).
+A personal iPhone app ("Whisper Lift", internally `GarageTiles`) that opens and closes two myQ garage doors by Siri and from its door cards. A CarPlay widget was the original secondary goal; it is not built. The design and phases are in [PLAN.md](PLAN.md).
 
-> **Safety:** this app can move real garage doors. Its door cards, `OpenDoorIntent` and `CloseDoorIntent` send live myQ commands once you sign in, including from Siri while the iPhone is locked. Test only with a person watching the door and the wall control in reach. The spike counter widget is the only part that uses a mock counter.
+> **Safety:** this app can move real garage doors. Its door cards, `OpenDoorIntent` and `CloseDoorIntent` send live myQ commands once you sign in, including from Siri while the iPhone is locked. Test only with a person watching the door and the wall control in reach.
 
 ## Status
 

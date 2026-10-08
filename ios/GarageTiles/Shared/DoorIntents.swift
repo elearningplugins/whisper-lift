@@ -59,7 +59,7 @@ enum DoorIntentRunner {
         let environment: GarageEnvironment
         do {
             // Siri answers as soon as myQ accepts the command, after one status read; the app screen confirms the movement.
-            environment = try GarageEnvironment.live(profile: .siri)
+            environment = try AppEnvironment.current(profile: .siri)
         } catch {
             throw DoorIntentError.notSetUp
         }
