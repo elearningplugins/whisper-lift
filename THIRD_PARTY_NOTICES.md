@@ -27,6 +27,16 @@ Each change and its tests are listed in [`docs/gatectl-security-review.md`](docs
 
 gatectl adapts the myQ form parsing, OAuth sequence, client metadata, and residential endpoint research from https://github.com/bvdcode/myq-home-assistant (MIT License, Copyright (c) 2026 Vadim Belov). The Swift client in `GarageDoorKit` reimplements the same protocol from gatectl's code: the endpoints, the client metadata in `MyQMetadata.swift`, and the sign-in sequence in `MyQSignIn.swift`. The full license text is reproduced in [`vendor/gatectl/NOTICE.md`](vendor/gatectl/NOTICE.md).
 
+## Atkinson Hyperlegible Next
+
+| Item | Value |
+| --- | --- |
+| Location | `ios/GarageTiles/GarageTiles/Fonts` (Regular, SemiBold and Bold, unmodified) |
+| Upstream | https://github.com/googlefonts/atkinson-hyperlegible-next |
+| License | SIL Open Font License 1.1, Copyright 2020-2024 The Atkinson Hyperlegible Next Project Authors; full text in [`OFL-AtkinsonHyperlegibleNext.txt`](ios/GarageTiles/GarageTiles/Fonts/OFL-AtkinsonHyperlegibleNext.txt) |
+
+The app design uses this typeface, made by the Braille Institute for low-vision readers.
+
 ## Trademarks
 
 myQ, Chamberlain, and LiftMaster are trademarks of The Chamberlain Group LLC. Apple, iPhone, Siri, and CarPlay are trademarks of Apple Inc. This project is not affiliated with, endorsed by, or sponsored by Chamberlain Group, myQ, or Apple. Names are used only to describe compatibility.

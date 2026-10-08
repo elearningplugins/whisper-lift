@@ -2,7 +2,7 @@
 
 This spike checks the path from the user to the app before any myQ work starts. It builds a free-signed iPhone app and a `systemSmall` widget. Tapping the widget increments a mock counter shared through an App Group.
 
-**Scope:** the spike itself, now the app's **Spike** tab and the counter widget, contains no myQ client, credentials or door commands; its only side effect is a small JSON counter in the App Group. **The same app now also has a Doors tab and Siri intents that send real myQ door commands** (see [garage-door-kit.md](garage-door-kit.md)), so treat any installed build as able to move the doors.
+**Scope:** the spike itself, now only the counter widget (the app's Spike tab was removed on 2026-10-07), contains no myQ client, credentials or door commands; its only side effect is a small JSON counter in the App Group. **The same app now also has a Doors tab and Siri intents that send real myQ door commands** (see [garage-door-kit.md](garage-door-kit.md)), so treat any installed build as able to move the doors.
 
 ## What is in the repository
 

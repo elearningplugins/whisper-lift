@@ -9,14 +9,10 @@ struct GarageTilesApp: App {
 
     var body: some Scene {
         WindowGroup {
-            TabView {
-                Tab("Doors", systemImage: "door.garage.closed") {
-                    DoorsView()
-                }
-                Tab("Spike", systemImage: "plus.square") {
-                    ContentView()
-                }
-            }
+            // One screen: the doors, with Settings behind the moon. The Phase 0 Spike tab is gone; its widget remains for the widget checks.
+            DoorsView()
+                .preferredColorScheme(.dark)
+                .tint(Theme.amber)
         }
     }
 }

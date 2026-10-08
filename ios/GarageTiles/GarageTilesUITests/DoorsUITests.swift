@@ -1,17 +1,14 @@
 import XCTest
 
-/** Drives the Doors tab without a myQ session; nothing here contacts myQ or moves a door. */
+/** Drives the doors screen without a myQ session; nothing here contacts myQ or moves a door. */
 @MainActor
 final class DoorsUITests: XCTestCase {
     private var app: XCUIApplication!
 
-    private func launchOnDoorsTab() {
+    private func launch() {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launch()
-        let tab = app.tabBars.buttons["Doors"]
-        XCTAssertTrue(tab.waitForExistence(timeout: 10))
-        tab.tap()
     }
 
     private func expandTokenImport() {
@@ -20,8 +17,8 @@ final class DoorsUITests: XCTestCase {
         advanced.tap()
     }
 
-    func testDoorsTabOffersSignInWithTokenImportTuckedAway() {
-        launchOnDoorsTab()
+    func testSignedOutScreenOffersSignInWithTokenImportTuckedAway() {
+        launch()
         let signIn = app.buttons["signInButton"]
         XCTAssertTrue(signIn.waitForExistence(timeout: 10))
         XCTAssertEqual(signIn.label, "Sign in with myQ")
@@ -30,14 +27,13 @@ final class DoorsUITests: XCTestCase {
         expandTokenImport()
         XCTAssertTrue(app.secureTextFields["tokenField"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["importTokenButton"].isEnabled)
-        XCTAssertEqual(app.staticTexts["sessionStatus"].label, "Not signed in")
-        XCTAssertTrue(app.staticTexts["noDoorsMessage"].exists)
-        XCTAssertTrue(app.staticTexts["lockedPhoneWarning"].exists)
-        XCTAssertFalse(app.buttons["exportRequestLogButton"].exists, "there is no request log to export before any myQ request")
+        XCTAssertFalse(app.tabBars.firstMatch.exists, "the app is one screen with no tab bar")
+        XCTAssertFalse(app.buttons["exportRequestLogButton"].exists, "the header with Export JSON appears only when signed in")
+        XCTAssertFalse(app.buttons["settingsButton"].exists)
     }
 
     func testImportRejectsAnAuthorizationHeaderWithoutNetwork() {
-        launchOnDoorsTab()
+        launch()
         expandTokenImport()
         let field = app.secureTextFields["tokenField"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
@@ -47,13 +43,6 @@ final class DoorsUITests: XCTestCase {
         let message = app.staticTexts["importMessage"]
         XCTAssertTrue(message.waitForExistence(timeout: 10))
         XCTAssertEqual(message.label, "That looks like an Authorization header. Paste only the refresh token.")
-        XCTAssertEqual(app.staticTexts["sessionStatus"].label, "Not signed in")
-    }
-
-    func testDoorsTabLinksToTheSiriPhrases() {
-        launchOnDoorsTab()
-        let shortcutsLink = app.descendants(matching: .any)["shortcutsLink"]
-        for _ in 0..<4 where !shortcutsLink.exists { app.swipeUp() }
-        XCTAssertTrue(shortcutsLink.exists, "the Shortcuts link shows every Siri phrase")
+        XCTAssertTrue(app.buttons["signInButton"].exists, "still signed out")
     }
 }

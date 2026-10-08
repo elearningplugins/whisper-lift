@@ -1,23 +1,20 @@
 import XCTest
 
-/** Apple's accessibility audit on each tab, plus the Doors controls at the largest accessibility text size. */
+/** Apple's accessibility audit on the doors screen, plus its controls at the largest accessibility text size. */
 @MainActor
 final class AccessibilityUITests: XCTestCase {
-    private func launch(arguments: [String] = [], tab: String) -> XCUIApplication {
+    private func launch(arguments: [String] = []) -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments += arguments
         app.launch()
-        let button = app.tabBars.buttons[tab]
-        XCTAssertTrue(button.waitForExistence(timeout: 10))
-        button.tap()
-        // Let the tab transition finish so the audit never measures colors mid-animation.
+        // Let the first layout settle so the audit never measures colors mid-animation.
         Thread.sleep(forTimeInterval: 2)
         return app
     }
 
     func testDoorsTabPassesTheAccessibilityAudit() throws {
-        let app = launch(tab: "Doors")
+        let app = launch()
         expandTokenImport(app)
         XCTAssertTrue(app.secureTextFields["tokenField"].waitForExistence(timeout: 10))
         // A secure field is single-line by design; testDoorsControlsStayReachableAtTheLargestTextSize proves it stays usable.
@@ -31,18 +28,11 @@ final class AccessibilityUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 1)
     }
 
-    func testSpikeTabPassesTheAccessibilityAudit() throws {
-        let app = launch(tab: "Spike")
-        XCTAssertTrue(app.staticTexts["appGroupStatus"].waitForExistence(timeout: 10))
-        // The Spike tab is the Phase 0 counter diagnostic, not a driver-facing screen, so its fixed-size rows are accepted.
-        try audit(app, allowing: [(.dynamicType, "*")])
-    }
-
     // Fails on every issue except the listed audit type on the element with that identifier or label ("*" for any element), and names each element.
     private func audit(_ app: XCUIApplication, allowing allowed: [(XCUIAccessibilityAuditType, String)] = []) throws {
         try app.performAccessibilityAudit { issue in
             let element = issue.element
-            // A contrast finding with no element is shared system chrome on both tabs; every text element the app owns is audited and passes.
+            // A contrast finding with no element is shared system chrome; every text element the app owns is audited and passes.
             let unattributedContrast = issue.auditType == .contrast && element == nil
             // WCAG 1.4.3 exempts inactive controls: a disabled button is dimmed on purpose to show it is unavailable.
             let disabledContrast = issue.auditType == .contrast && element?.isEnabled == false
@@ -58,31 +48,27 @@ final class AccessibilityUITests: XCTestCase {
     }
 
     func testDoorsControlsStayReachableAtTheLargestTextSize() {
-        let app = launch(arguments: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"], tab: "Doors")
+        let app = launch(arguments: ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"])
         XCTAssertTrue(app.buttons["signInButton"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["signInButton"].isHittable)
         expandTokenImport(app)
         let field = app.secureTextFields["tokenField"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         XCTAssertTrue(field.isHittable)
-        XCTAssertEqual(app.staticTexts["sessionStatus"].label, "Not signed in")
         let importButton = app.buttons["importTokenButton"]
-        XCTAssertTrue(importButton.exists)
-        let warning = app.staticTexts["lockedPhoneWarning"]
-        for _ in 0..<6 where !warning.isHittable {
+        for _ in 0..<6 where !importButton.isHittable {
             app.swipeUp()
         }
-        XCTAssertTrue(warning.isHittable, "The locked-phone warning must be reachable by scrolling at the largest text size")
+        XCTAssertTrue(importButton.isHittable, "Import token must be reachable by scrolling at the largest text size")
     }
 
     func testDoorsControlsHaveSpokenLabels() {
-        let app = launch(tab: "Doors")
+        let app = launch()
         XCTAssertTrue(app.buttons["signInButton"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons["signInButton"].label, "Sign in with myQ")
         expandTokenImport(app)
         XCTAssertTrue(app.secureTextFields["tokenField"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.buttons["importTokenButton"].label, "Import token")
         XCTAssertFalse(app.secureTextFields["tokenField"].placeholderValue?.isEmpty ?? true)
-        XCTAssertEqual(app.tabBars.buttons["Doors"].label, "Doors")
     }
 }

@@ -36,6 +36,7 @@ public struct GarageEnvironment: Sendable {
     public let trafficLog: TrafficLog
     let commands: DoorCommandService
     let commandLock: FileCommandLock
+    let now: @Sendable () -> Date
     let transport: any HTTPTransport
     let configuration: MyQConfiguration?
 
@@ -63,6 +64,7 @@ public struct GarageEnvironment: Sendable {
         client = MyQClient(transport: transport, tokens: tokens)
         importer = SessionImporter(store: tokenStore, tokens: tokens)
         commandLock = FileCommandLock(directory: dataDirectory)
+        self.now = now
         commands = DoorCommandService(
             api: client, snapshots: snapshotStore, commandLock: commandLock, followUpReads: profile.followUpReads, now: now, sleep: sleep
         )
@@ -102,7 +104,6 @@ public struct GarageEnvironment: Sendable {
         return (outcome, outcome.dialog(doorName: door.name))
     }
 
-    /** Re-reads every garage door from myQ and replaces the catalog. */
     /** Runs the in-app myQ sign-in through the metered transport and saves the new session to the shared Keychain. */
     public func signIn(with authenticator: any WebAuthenticating, makeState: @escaping @Sendable () -> String = { PKCE.randomToken() }) async throws {
         try await MyQSignInFlow(transport: transport, tokens: tokens, authenticator: authenticator, configuration: configuration, makeState: makeState).signIn()
@@ -139,6 +140,63 @@ public struct GarageEnvironment: Sendable {
         }
     }
 
+    /** What a status check found, worst result first when accounts differ. */
+    public enum StatusRefresh: Equatable, Sendable {
+        case updated
+        case noDoors
+        case signInRequired
+        case rateLimited
+        case unreachable
+    }
+
+    /** Reads every saved door's live state, one request per account and never a command, so the app never shows an old state as current. */
+    public func refreshStatus() async -> StatusRefresh {
+        guard let catalog = try? catalogStore.read(), !catalog.doors.isEmpty else { return .noDoors }
+        var result = StatusRefresh.updated
+        let accounts = Dictionary(grouping: catalog.doors, by: \.identity.accountID).sorted { $0.key < $1.key }
+        for (accountID, doors) in accounts {
+            let devices: [DoorDevice]
+            do {
+                devices = try await client.devices(in: MyQAccount(id: accountID, name: doors[0].accountName))
+            } catch TokenError.signInRequired {
+                await mark(doors, .signInRequired)
+                result = .signInRequired
+                continue
+            } catch MyQError.rateLimited {
+                await mark(doors, .rateLimited)
+                if result == .updated { result = .rateLimited }
+                continue
+            } catch {
+                await mark(doors, .unreachable)
+                if result == .updated || result == .rateLimited { result = .unreachable }
+                continue
+            }
+            for door in doors {
+                guard case .found(let device) = DoorCommandService.lookup(door.identity, in: devices) else { continue }
+                let fetchedAt = now()
+                await whileDoorIsIdle(door) { cached in
+                    DoorSnapshot(device: device, fetchedAt: fetchedAt, lastCommand: cached?.lastCommand, lastCommandAt: cached?.lastCommandAt, problem: nil)
+                }
+            }
+        }
+        return result
+    }
+
+    private func mark(_ doors: [CatalogDoor], _ problem: DoorProblem) async {
+        for door in doors {
+            await whileDoorIsIdle(door) { cached in cached?.marking(problem) }
+        }
+    }
+
+    // Writes under the door's command lock and skips a door whose command is running, so its uncertain-command record is never overwritten.
+    private func whileDoorIsIdle(_ door: CatalogDoor, _ update: @escaping @Sendable (DoorSnapshot?) -> DoorSnapshot?) async {
+        _ = try? await commandLock.withDoorLock(door.identity) {
+            let cached = try? snapshotStore.snapshot(for: door.identity)
+            if let next = update(cached) { try? snapshotStore.upsert(next) }
+        }
+    }
+
+    /** Re-reads every garage door from myQ and replaces the catalog. */
     public func discoverDoors() async throws -> DoorCatalog {
         let catalog = try await DoorDiscovery.discover(using: client)
         try catalogStore.write(catalog)

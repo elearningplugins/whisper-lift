@@ -186,3 +186,109 @@ private func signedIn(_ keychain: FakeKeychain) throws {
         #expect(try env.catalogStore.read().doors.isEmpty)
     }
 }
+
+@Suite struct StatusRefreshTests {
+    private let small = CatalogDoor(identity: DoorIdentity(accountID: "account-1", serial: "door-1"), accountName: "Demo Home", name: "Single Car Garage")
+
+    private func device(_ door: CatalogDoor, _ state: DoorState) -> DoorDevice {
+        DoorDevice(
+            identity: door.identity, accountName: door.accountName, name: door.name, family: "garagedoor", state: state, online: true,
+            unattendedOpenAllowed: true, unattendedCloseAllowed: true, vacationMode: nil, activeFaults: [], lastServerUpdate: nil
+        )
+    }
+
+    private func bothDoorsJSON(small smallState: String, big bigState: String) -> Result<HTTPResponse, MyQError> {
+        .success(HTTPResponse(status: 200, headers: [:], body: Data("""
+        {"items":[{"serial_number":"door-1","name":"Single Car Garage","device_family":"garagedoor","state":{"door_state":"\(smallState)","online":true,"is_unattended_open_allowed":true,"is_unattended_close_allowed":true}},{"serial_number":"door-2","name":"Two Car Garage","device_family":"garagedoor","state":{"door_state":"\(bigState)","online":true,"is_unattended_open_allowed":true,"is_unattended_close_allowed":true}}]}
+        """.utf8)))
+    }
+
+    // Five hours old, from the last command, as on the owner's phone when the app showed a closed door as open.
+    private func staleSnapshot(_ door: CatalogDoor, _ state: DoorState, problem: DoorProblem? = nil) -> DoorSnapshot {
+        DoorSnapshot(device: device(door, state), fetchedAt: now.addingTimeInterval(-18_000), lastCommand: .open, lastCommandAt: now.addingTimeInterval(-18_000), problem: problem)
+    }
+
+    @Test func refreshReplacesStaleStateWithOneLiveReadPerAccount() async throws {
+        let keychain = FakeKeychain()
+        try signedIn(keychain)
+        let transport = FakeTransport([bothDoorsJSON(small: "closed", big: "closed")])
+        let env = environment(tempDirectory(), keychain: keychain, transport: transport)
+        try env.catalogStore.write(DoorCatalog(doors: [small, big]))
+        try env.snapshotStore.upsert(staleSnapshot(small, .open, problem: .unreachable))
+        try env.snapshotStore.upsert(staleSnapshot(big, .closed))
+
+        #expect(await env.refreshStatus() == .updated)
+        #expect(transport.requests.map(\.method) == ["GET"], "one read for the one account, and never a command")
+        #expect(transport.requests[0].url.path.hasSuffix("/Devices"))
+        let refreshed = try #require(try env.snapshotStore.snapshot(for: small.identity))
+        #expect(refreshed.device.state == .closed)
+        #expect(refreshed.fetchedAt == now)
+        #expect(refreshed.problem == nil)
+        #expect(refreshed.lastCommandAt == now.addingTimeInterval(-18_000), "the last command time is kept for the cooldown")
+        #expect(try env.snapshotStore.snapshot(for: big.identity)?.fetchedAt == now)
+    }
+
+    @Test func aDoorWithNoSavedStateGetsOne() async throws {
+        let keychain = FakeKeychain()
+        try signedIn(keychain)
+        let env = environment(tempDirectory(), keychain: keychain, transport: FakeTransport([bothDoorsJSON(small: "open", big: "closed")]))
+        try env.catalogStore.write(DoorCatalog(doors: [small, big]))
+        #expect(await env.refreshStatus() == .updated)
+        #expect(try env.snapshotStore.snapshot(for: small.identity)?.device.state == .open)
+        #expect(try env.snapshotStore.snapshot(for: small.identity)?.lastCommandAt == nil)
+    }
+
+    @Test func aFailedReadKeepsTheLastStateAndMarksItUnreachable() async throws {
+        let keychain = FakeKeychain()
+        try signedIn(keychain)
+        let env = environment(tempDirectory(), keychain: keychain, transport: FakeTransport([]))
+        try env.catalogStore.write(DoorCatalog(doors: [small]))
+        try env.snapshotStore.upsert(staleSnapshot(small, .open))
+        #expect(await env.refreshStatus() == .unreachable)
+        let kept = try #require(try env.snapshotStore.snapshot(for: small.identity))
+        #expect(kept.device.state == .open)
+        #expect(kept.fetchedAt == now.addingTimeInterval(-18_000), "a failed read never refreshes the age")
+        #expect(kept.problem == .unreachable)
+    }
+
+    @Test func withoutASessionNothingIsSentAndTheDoorsAskToSignIn() async throws {
+        let transport = FakeTransport([])
+        let env = environment(tempDirectory(), keychain: FakeKeychain(), transport: transport)
+        try env.catalogStore.write(DoorCatalog(doors: [small]))
+        try env.snapshotStore.upsert(staleSnapshot(small, .open))
+        #expect(await env.refreshStatus() == .signInRequired)
+        #expect(transport.requests.isEmpty)
+        #expect(try env.snapshotStore.snapshot(for: small.identity)?.problem == .signInRequired)
+    }
+
+    @Test func rateLimitingIsReported() async throws {
+        let keychain = FakeKeychain()
+        try signedIn(keychain)
+        let env = environment(tempDirectory(), keychain: keychain, transport: FakeTransport([.success(HTTPResponse(status: 429, headers: [:], body: Data()))]))
+        try env.catalogStore.write(DoorCatalog(doors: [small]))
+        #expect(await env.refreshStatus() == .rateLimited)
+    }
+
+    @Test func noDoorsMeansNoRequest() async {
+        let transport = FakeTransport([])
+        let env = environment(tempDirectory(), keychain: FakeKeychain(), transport: transport)
+        #expect(await env.refreshStatus() == .noDoors)
+        #expect(transport.requests.isEmpty)
+    }
+
+    @Test func aDoorWithACommandInProgressIsLeftToThatCommand() async throws {
+        let keychain = FakeKeychain()
+        try signedIn(keychain)
+        let env = environment(tempDirectory(), keychain: keychain, transport: FakeTransport([bothDoorsJSON(small: "closed", big: "closed")]))
+        try env.catalogStore.write(DoorCatalog(doors: [small, big]))
+        let commandRecord = DoorSnapshot(device: device(small, .closed), fetchedAt: now, lastCommand: .open, lastCommandAt: now, problem: .uncertainCommand)
+        try env.snapshotStore.upsert(commandRecord)
+        let lockURL = FileCommandLock(directory: env.catalogStore.directory).url(for: small.identity)
+        let descriptor = open(lockURL.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        defer { close(descriptor) }
+        #expect(flock(descriptor, LOCK_EX | LOCK_NB) == 0)
+        #expect(await env.refreshStatus() == .updated)
+        #expect(try env.snapshotStore.snapshot(for: small.identity) == commandRecord, "a running command's uncertain record is never overwritten")
+        #expect(try env.snapshotStore.snapshot(for: big.identity)?.device.state == .closed)
+    }
+}
