@@ -4,6 +4,8 @@ A personal iPhone app ("Whisper Lift", internally `GarageTiles`) that opens and 
 
 > **Safety:** this app can move real garage doors. Its door cards, `OpenDoorIntent` and `CloseDoorIntent` send live myQ commands once you sign in, including from Siri while the iPhone is locked. Test only with a person watching the door and the wall control in reach.
 
+<img width="1206" height="2622" alt="Image from iOS (1)" src="https://github.com/user-attachments/assets/04183da1-9346-472a-9e49-19a3cac016c2" />
+
 ## Status
 
 - **Phase 0 (feasibility spike):** finished as far as it goes; the counter spike's app tab and widget were removed on 2026-10-07, and its device results are recorded in [docs/phase-0-spike.md](docs/phase-0-spike.md). CI builds the app for iOS 26 and runs Simulator UI tests. On 2026-10-07 the app was signed with the free Personal Team (App Group and Keychain group accepted, check A3) and installed on an iPhone running iOS 26. See [docs/phase-0-spike.md](docs/phase-0-spike.md).
